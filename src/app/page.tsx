@@ -1,66 +1,56 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import { redirect } from 'next/navigation';
+import { isAuthenticated } from '@/lib/auth';
+import { getDb } from '@/lib/db';
+import LoginForm from './LoginForm';
 
-export default function Home() {
+export default async function LoginPage() {
+  // If already logged in, go straight to dashboard
+  if (await isAuthenticated()) {
+    redirect('/dashboard');
+  }
+
+  // Fetch institute name for the title
+  let instituteName = 'Chuti Leave Management';
+  try {
+    const db = await getDb();
+    const setting = await db.get('SELECT value FROM system_settings WHERE key = ?', 'institute_name');
+    if (setting) instituteName = setting.value;
+  } catch (err) {
+    console.error('Failed to fetch settings:', err);
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      backgroundColor: '#f5f8f6',
+      padding: '1.5rem'
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: '400px',
+        textAlign: 'center'
+      }}>
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '-0.05em', color: '#1b3a24' }}>
+            Chuti
+          </h1>
+          <p style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>{instituteName}</p>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="card" style={{ textAlign: 'left', padding: '2rem' }}>
+          <h2 className="card-title" style={{ fontSize: '1.25rem', marginBottom: '0.5rem', fontWeight: '600' }}>Admin Login</h2>
+          <p style={{ fontSize: '0.8125rem', marginBottom: '1.5rem' }}>Enter password to access the leave management console.</p>
+          
+          <LoginForm />
         </div>
-      </main>
-    </div>
+        
+        <footer style={{ marginTop: '3rem', fontSize: '0.75rem', color: '#8c9c92' }}>
+          Chuti Leave Management System • Open Source
+        </footer>
+      </div>
+    </main>
   );
 }
