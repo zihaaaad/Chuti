@@ -113,7 +113,7 @@ export default function GuidePage() {
               <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
                 <li>Click <strong>Download Template CSV</strong> on the Employees page to download the correctly formatted file.</li>
                 <li>Open the downloaded CSV in Microsoft Excel or Google Sheets.</li>
-                <li>Add your employees' details under the respective column headers: <code>EmployeeID</code>, <code>Name</code>, <code>Designation</code>, <code>Department</code>, <code>Phone</code>, and <code>JoiningDate</code> (formatted as YYYY-MM-DD).</li>
+                <li>Add your employees&apos; details under the respective column headers: <code>EmployeeID</code>, <code>Name</code>, <code>Designation</code>, <code>Department</code>, <code>Phone</code>, and <code>JoiningDate</code> (formatted as YYYY-MM-DD).</li>
                 <li>Save the spreadsheet as a CSV (Comma Separated Values) file.</li>
                 <li>Click <strong>Choose File</strong> inside the Import section, select your file, and click <strong>Import CSV</strong>.</li>
               </ol>
@@ -167,7 +167,7 @@ export default function GuidePage() {
                 borderRadius: 'var(--radius-md)',
                 fontSize: '0.8125rem'
               }}>
-                <strong>Smart Validations:</strong> The system automatically blocks leave dates that overlap with existing bookings (unless both are logged as half-days on the same day). It also blocks bookings if the requested duration exceeds the employee's remaining quota.
+                <strong>Smart Validations:</strong> The system automatically blocks leave dates that overlap with existing bookings (unless both are logged as half-days on the same day). It also blocks bookings if the requested duration exceeds the employee&apos;s remaining quota.
               </div>
             </div>
           )}
@@ -194,7 +194,7 @@ export default function GuidePage() {
 
               <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Printing A4 Landscape PDF Reports</h3>
               <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Clicking the <strong>Print Report</strong> button automatically triggers your browser's print utility. The system uses specific print layouts configured to:
+                Clicking the <strong>Print Report</strong> button automatically triggers your browser&apos;s print utility. The system uses specific print layouts configured to:
               </p>
               <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
                 <li>Hide the sidebar navigation menu, filter controls, action bars, and buttons.</li>
@@ -210,7 +210,7 @@ export default function GuidePage() {
                 borderRadius: 'var(--radius-md)',
                 fontSize: '0.8125rem'
               }}>
-                <strong>How to Save as PDF:</strong> When the browser print window opens, select <strong>Save as PDF</strong> (instead of selecting a physical printer) under the "Destination" dropdown. This saves the report locally as a PDF.
+                <strong>How to Save as PDF:</strong> When the browser print window opens, select <strong>Save as PDF</strong> (instead of selecting a physical printer) under the &quot;Destination&quot; dropdown. This saves the report locally as a PDF.
               </div>
             </div>
           )}

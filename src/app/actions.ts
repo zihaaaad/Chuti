@@ -32,7 +32,7 @@ function hasOverlapConflict(
     ? records.filter(r => r.id !== ignoreRecordId)
     : records;
     
-  let current = new Date(start);
+  const current = new Date(start);
   while (current <= end) {
     const currentStr = current.toISOString().split('T')[0];
     
@@ -334,7 +334,7 @@ export async function calculateLeaveDays(
   };
 
   let count = 0;
-  let current = new Date(start);
+  const current = new Date(start);
   while (current <= end) {
     const dayName = dayOfWeekMap[current.getUTCDay()];
     const isWeekend = weekendDays.includes(dayName);

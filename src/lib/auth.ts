@@ -18,7 +18,7 @@ export async function isAuthenticated(): Promise<boolean> {
     if (!adminPasswordHash) return false;
 
     // Retrieve or initialize session secret
-    let secretSetting = await db.get("SELECT value FROM system_settings WHERE key = 'session_secret'");
+    const secretSetting = await db.get("SELECT value FROM system_settings WHERE key = 'session_secret'");
     let secret = secretSetting?.value;
     if (!secret) {
       secret = crypto.randomBytes(32).toString('hex');
@@ -49,7 +49,7 @@ export async function loginAdmin(password: string): Promise<boolean> {
   if (!isValid) return false;
 
   // Retrieve or initialize session secret
-  let secretSetting = await db.get("SELECT value FROM system_settings WHERE key = 'session_secret'");
+  const secretSetting = await db.get("SELECT value FROM system_settings WHERE key = 'session_secret'");
   let secret = secretSetting?.value;
   if (!secret) {
     secret = crypto.randomBytes(32).toString('hex');

@@ -420,7 +420,7 @@ export default function ReportsClient({
           </div>
           
           <div className="no-print" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', fontSize: '0.8125rem', color: 'var(--foreground-muted)' }}>
-            * Note: "Net Paid Days" represents the payable days for the selected month (Calendar days in month minus LWP days).
+            * Note: &quot;Net Paid Days&quot; represents the payable days for the selected month (Calendar days in month minus LWP days).
           </div>
         </div>
       )}
