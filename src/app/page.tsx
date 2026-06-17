@@ -34,7 +34,7 @@ export default async function LoginPage() {
         textAlign: 'center'
       }}>
         <div style={{ marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '-0.05em', color: '#1b3a24' }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '-0.05em', color: 'var(--primary)' }}>
             Chuti
           </h1>
           <p style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>{instituteName}</p>

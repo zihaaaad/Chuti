@@ -26,7 +26,7 @@ export default function GuidePage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '2rem', alignItems: 'start' }}>
         {/* Left: Tab selectors */}
-        <div className="card animate-scale-in" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', animation: 'popup-scale-in 0.1s ease-out' }}>
+        <div className="card animate-scale-in" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', animation: 'popup-scale-in 0.05s ease-out' }}>
           {tabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -59,7 +59,7 @@ export default function GuidePage() {
         </div>
 
         {/* Right: Content panel */}
-        <div className="card animate-scale-in" style={{ minHeight: '60vh', padding: '2rem', animation: 'popup-scale-in 0.1s ease-out' }}>
+        <div className="card animate-scale-in" style={{ minHeight: '60vh', padding: '2rem', animation: 'popup-scale-in 0.05s ease-out' }}>
           {activeTab === 'getting-started' && (
             <div>
               <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>

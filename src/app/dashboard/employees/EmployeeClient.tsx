@@ -446,7 +446,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
 
             {/* Form */}
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="grid-2col">
                 <div className="form-group">
                   <label className="form-label" htmlFor="emp-code">Employee ID Code *</label>
                   <input 
@@ -474,7 +474,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="grid-2col">
                 <div className="form-group">
                   <label className="form-label" htmlFor="emp-designation">Designation *</label>
                   <input 
@@ -506,7 +506,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="grid-2col">
                 <div className="form-group">
                   <label className="form-label" htmlFor="emp-joining">Joining Date *</label>
                   <input 
@@ -556,7 +556,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
                   Yearly Leave Quotas (Allowed Days)
                 </h4>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.75rem' }}>
+                <div className="grid-4col">
                   <div className="form-group">
                     <label className="form-label" htmlFor="cl-alloc">Casual (CL)</label>
                     <input 

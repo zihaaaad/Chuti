@@ -168,13 +168,7 @@ export default async function DashboardLayout({
       </aside>
 
       {/* Main Content Area */}
-      <div style={{
-        flex: 1,
-        marginLeft: 'var(--sidebar-width)',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column'
-      }}>
+      <div className="main-content">
         {/* Simple Header */}
         <header className="no-print" style={{
           height: '60px',

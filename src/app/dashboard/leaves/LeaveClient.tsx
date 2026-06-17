@@ -477,7 +477,7 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1rem' }}>
+              <div className="grid-2col">
                 <div className="form-group">
                   <label className="form-label" htmlFor="leave-type">Leave Type *</label>
                   <select 
@@ -513,7 +513,7 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="grid-2col">
                 <div className="form-group">
                   <label className="form-label" htmlFor="leave-start">Start Date *</label>
                   <input 
@@ -811,7 +811,7 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
             display: 'flex',
             flexDirection: 'column',
             padding: '1.5rem',
-            animation: 'popup-scale-in 0.15s ease-out'
+            animation: 'popup-scale-in 0.05s ease-out'
           }}>
             <div style={{
               display: 'flex',

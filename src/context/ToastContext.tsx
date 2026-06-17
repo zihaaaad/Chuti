@@ -76,10 +76,10 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         fontWeight: 500,
         boxShadow: 'var(--shadow-lg)',
         border: '1px solid transparent',
-        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'all 0.05s ease-out',
         minWidth: '280px',
         maxWidth: '450px',
-        animation: 'toast-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+        animation: 'toast-slide-in 0.05s ease-out'
       }}
     >
       <span style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}>

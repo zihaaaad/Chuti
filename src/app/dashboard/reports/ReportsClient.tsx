@@ -167,7 +167,7 @@ export default function ReportsClient({
     <div>
       {/* Printable Document Header (Hidden on Web screen, visible in print) */}
       <div className="print-header">
-        <h1 style={{ fontSize: '1.75rem', color: '#1b3a24', margin: '0 0 4px 0' }}>{instituteName}</h1>
+        <h1 style={{ fontSize: '1.75rem', color: 'var(--primary)', margin: '0 0 4px 0' }}>{instituteName}</h1>
         <h2 style={{ fontSize: '1.25rem', color: '#536359', margin: '0 0 10px 0' }}>
           {activeTab === 'logs' ? 'Leave Ledger Record Log' : 'Monthly Payroll Attendance Summary'}
         </h2>
@@ -424,6 +424,33 @@ export default function ReportsClient({
           </div>
         </div>
       )}
+
+      {/* Print Footer - Signature Section (Visible only in print) */}
+      <div className="print-footer" style={{ display: 'none' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '3rem', marginTop: '5rem', padding: '0 1rem' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ borderTop: '1px solid #000000', paddingTop: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+              Prepared By (HR Staff)
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#536359', marginTop: '0.25rem' }}>Signature & Date</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ borderTop: '1px solid #000000', paddingTop: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+              Checked By (Accounts)
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#536359', marginTop: '0.25rem' }}>Signature & Date</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ borderTop: '1px solid #000000', paddingTop: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+              Authorized Approval
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#536359', marginTop: '0.25rem' }}>Seal & Signature</div>
+          </div>
+        </div>
+        <div style={{ marginTop: '3rem', textAlign: 'center', fontSize: '0.75rem', color: '#8c9c92', borderTop: '1px dashed #e0e9e3', paddingTop: '1rem' }}>
+          Chuti Leave Management System — Open Source Local Portal
+        </div>
+      </div>
     </div>
   );
 }

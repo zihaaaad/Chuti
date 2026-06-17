@@ -143,6 +143,10 @@ export async function getDb(): Promise<Database> {
       UNIQUE(employee_id, month_year),
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     );
+
+    CREATE INDEX IF NOT EXISTS idx_leave_records_employee_id ON leave_records (employee_id);
+    CREATE INDEX IF NOT EXISTS idx_leave_records_dates ON leave_records (start_date, end_date);
+    CREATE INDEX IF NOT EXISTS idx_employees_status ON employees (status);
   `);
 
   // Run safe schema migrations (adds columns to existing DB files if code updates)

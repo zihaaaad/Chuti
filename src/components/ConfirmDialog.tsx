@@ -33,13 +33,13 @@ export default function ConfirmDialog({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(15, 46, 30, 0.4)', // subtle green overlay
+      backgroundColor: 'rgba(9, 9, 11, 0.4)', // neutral dark overlay
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 100000,
       backdropFilter: 'blur(4px)',
-      animation: 'fade-in 0.1s ease-out'
+      animation: 'fade-in 0.05s ease-out'
     }}>
       <div style={{
         backgroundColor: '#ffffff',
@@ -49,7 +49,7 @@ export default function ConfirmDialog({
         maxWidth: '400px',
         boxShadow: 'var(--shadow-lg)',
         border: '1px solid var(--border)',
-        animation: 'popup-scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
+        animation: 'popup-scale-in 0.05s ease-out'
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>

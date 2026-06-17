@@ -127,7 +127,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Main Grid Content */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
+      <div className="dashboard-layout-grid">
         
         {/* Left Side: Active Absences and Recent Leaves */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

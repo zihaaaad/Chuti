@@ -187,7 +187,7 @@ export default function SettingsClient({
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="grid-2col">
               <div className="form-group">
                 <label className="form-label" htmlFor="sandwich-toggle">Sandwich Rule</label>
                 <select 
@@ -348,7 +348,7 @@ export default function SettingsClient({
               />
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div className="grid-2col" style={{ marginBottom: '1rem' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" htmlFor="hol-start">Start Date *</label>
                 <input 
