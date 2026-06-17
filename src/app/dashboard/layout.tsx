@@ -3,7 +3,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import LogoutButton from './LogoutButton';
-import { LayoutDashboard, Users, FileText, BarChart3, Settings, CalendarRange, BookOpen } from 'lucide-react';
+import SidebarNav from './SidebarNav';
 
 export default async function DashboardLayout({
   children,
@@ -66,97 +66,7 @@ export default async function DashboardLayout({
         </div>
 
         {/* Navigation Links */}
-        <nav style={{ padding: '1.25rem 0.75rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <Link href="/dashboard" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.625rem 0.75rem',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--foreground-muted)',
-            transition: 'all 0.15s ease'
-          }} className="nav-link">
-            <LayoutDashboard size={18} />
-            Dashboard
-          </Link>
-
-          <Link href="/dashboard/employees" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.625rem 0.75rem',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--foreground-muted)',
-            transition: 'all 0.15s ease'
-          }} className="nav-link">
-            <Users size={18} />
-            Employees
-          </Link>
-
-          <Link href="/dashboard/leaves" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.625rem 0.75rem',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--foreground-muted)',
-            transition: 'all 0.15s ease'
-          }} className="nav-link">
-            <FileText size={18} />
-            Leave Records
-          </Link>
-
-          <Link href="/dashboard/reports" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.625rem 0.75rem',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--foreground-muted)',
-            transition: 'all 0.15s ease'
-          }} className="nav-link">
-            <BarChart3 size={18} />
-            Reports Center
-          </Link>
-
-          <Link href="/dashboard/settings" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.625rem 0.75rem',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--foreground-muted)',
-            transition: 'all 0.15s ease'
-          }} className="nav-link">
-            <Settings size={18} />
-            Settings
-          </Link>
-
-          <Link href="/dashboard/guide" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.625rem 0.75rem',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--foreground-muted)',
-            transition: 'all 0.15s ease'
-          }} className="nav-link">
-            <BookOpen size={18} />
-            User Guide
-          </Link>
-        </nav>
+        <SidebarNav />
 
         {/* Footer Area with Logout */}
         <div style={{
