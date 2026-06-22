@@ -1,0 +1,123 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'          # Also trigger on version tags like v1.0.1
+  workflow_dispatch:  # Allow manual trigger from GitHub Actions UI
+
+permissions:
+  contents: write    # Needed to create GitHub Releases and upload assets
+
+jobs:
+  build:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout source ─────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Node.js ──────────────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Install dependencies ────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 4. Build Next.js standalone output ────────────────────────────────
+      - name: Build Next.js (standalone)
+        run: npm run build
+
+      # ── 5. Determine release version ──────────────────────────────────────
+      - name: Get version from package.json
+        id: pkg
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Building version: $version"
+
+      # ── 6. Build Windows installer + portable EXE ─────────────────────────
+      - name: Build Electron Windows EXE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --x64
+
+      # ── 7. List produced artifacts ────────────────────────────────────────
+      - name: List dist output
+        shell: pwsh
+        run: Get-ChildItem dist -Recurse -File | Select-Object FullName, Length
+
+      # ── 8. Rename artifacts to consistent names ───────────────────────────
+      - name: Rename artifacts
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.pkg.outputs.VERSION }}"
+          # Rename installer
+          $setup = Get-ChildItem dist -Filter "*Setup*.exe" | Select-Object -First 1
+          if ($setup) {
+            Rename-Item $setup.FullName "dist\Chuti-Setup-$ver.exe"
+            echo "Renamed: $($setup.Name) -> Chuti-Setup-$ver.exe"
+          }
+          # Rename portable
+          $portable = Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notlike "*Setup*" } | Select-Object -First 1
+          if ($portable) {
+            Rename-Item $portable.FullName "dist\Chuti-Portable-$ver.exe"
+            echo "Renamed: $($portable.Name) -> Chuti-Portable-$ver.exe"
+          }
+
+      # ── 9. Upload as workflow artifacts (for manual download too) ─────────
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chuti-windows-exe
+          path: |
+            dist/Chuti-Setup-*.exe
+            dist/Chuti-Portable-*.exe
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ── 10. Create/update GitHub Release with the EXE files ───────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.VERSION }}
+          name: "Chuti v${{ steps.pkg.outputs.VERSION }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🌴 Chuti Leave Management System — v${{ steps.pkg.outputs.VERSION }}
+
+            ### Download
+            | File | Description |
+            |------|-------------|
+            | **Chuti-Setup-${{ steps.pkg.outputs.VERSION }}.exe** | 🔧 Installer (recommended) — installs to your chosen folder with a desktop shortcut |
+            | **Chuti-Portable-${{ steps.pkg.outputs.VERSION }}.exe** | 📦 Portable — run from anywhere, no install needed |
+
+            ### First Launch
+            On first launch, Chuti will ask you to choose a **data folder** where your database, backups, and uploaded files will be stored. This folder is yours — Chuti never deletes it.
+
+            ### System Requirements
+            - Windows 10 / 11 (64-bit)
+            - No internet connection required
+            - No admin rights needed (per-user install)
+
+            ### LAN Sharing
+            After starting, a popup will show the **Network URL** (e.g. `http://192.168.1.x:3000`). Share this with your team on the same Wi-Fi so they can access the app from their browsers.
+
+            ---
+            *Built automatically from commit `${{ github.sha }}`*
+          files: |
+            dist/Chuti-Setup-*.exe
+            dist/Chuti-Portable-*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
