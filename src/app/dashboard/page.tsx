@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
-import { Users, LogOut, Clock, CalendarDays, FileSpreadsheet } from 'lucide-react';
+import { Users, LogOut, Clock, CalendarDays } from 'lucide-react';
 import QuickLateForm from './QuickLateForm';
 import RefreshButton from './RefreshButton';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
@@ -27,12 +27,6 @@ export default function ConfirmDialog({
   confirmInputText
 }: ConfirmDialogProps) {
   const [inputValue, setInputValue] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      setInputValue('');
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 

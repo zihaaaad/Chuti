@@ -46,6 +46,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       <ConfirmDialog
+        key={isOpen ? 'open' : 'closed'}
         isOpen={isOpen}
         title={options.title}
         message={options.message}

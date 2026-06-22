@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { isAuthenticated } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import Link from 'next/link';
 import LogoutButton from './LogoutButton';
 import SidebarNav from './SidebarNav';
 

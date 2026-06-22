@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BookOpen, Users, FileText, Settings, BarChart3, ShieldCheck, HelpCircle, Network } from 'lucide-react';
+import { BookOpen, Users, FileText, Settings, BarChart3, ShieldCheck, Network } from 'lucide-react';
 
 export default function GuidePage() {
   const [activeTab, setActiveTab] = useState<'getting-started' | 'employees' | 'leaves' | 'reports' | 'settings' | 'backups'>('getting-started');
