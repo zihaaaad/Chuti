@@ -9,30 +9,13 @@ export async function isAuthenticated(): Promise<boolean> {
   const cookieStore = await cookies();
   const session = cookieStore.get(COOKIE_NAME);
   
-  if (!session) return false;
+  if (!session || !session.value) return false;
 
   try {
     const db = await getDb();
-    const adminPasswordHash = await db.get('SELECT value FROM system_settings WHERE key = ?', 'admin_password_hash');
+    const result = await db.get('SELECT session_id FROM admin_sessions WHERE session_id = ?', session.value);
     
-    if (!adminPasswordHash) return false;
-
-    // Retrieve or initialize session secret
-    const secretSetting = await db.get("SELECT value FROM system_settings WHERE key = 'session_secret'");
-    let secret = secretSetting?.value;
-    if (!secret) {
-      secret = crypto.randomBytes(32).toString('hex');
-      await db.run("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('session_secret', ?)", secret);
-    }
-    
-    const expectedToken = crypto.createHash('sha256').update(adminPasswordHash.value + secret).digest('hex');
-    
-    // Guard length to prevent timingSafeEqual buffer length mismatch exceptions
-    if (session.value.length !== expectedToken.length) {
-      return false;
-    }
-    
-    return crypto.timingSafeEqual(Buffer.from(session.value), Buffer.from(expectedToken));
+    return !!result;
   } catch (err) {
     console.error('Session verification error:', err);
     return false;
@@ -48,15 +31,11 @@ export async function loginAdmin(password: string): Promise<boolean> {
   const isValid = bcrypt.compareSync(password, adminPasswordHash.value);
   if (!isValid) return false;
 
-  // Retrieve or initialize session secret
-  const secretSetting = await db.get("SELECT value FROM system_settings WHERE key = 'session_secret'");
-  let secret = secretSetting?.value;
-  if (!secret) {
-    secret = crypto.randomBytes(32).toString('hex');
-    await db.run("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('session_secret', ?)", secret);
-  }
-
-  const sessionValue = crypto.createHash('sha256').update(adminPasswordHash.value + secret).digest('hex');
+  // Generate a unique secure session token
+  const sessionValue = crypto.randomBytes(32).toString('hex');
+  
+  // Store session in database
+  await db.run('INSERT INTO admin_sessions (session_id) VALUES (?)', sessionValue);
   
   // Set secure cookie
   const cookieStore = await cookies();
@@ -73,5 +52,16 @@ export async function loginAdmin(password: string): Promise<boolean> {
 
 export async function logoutAdmin(): Promise<void> {
   const cookieStore = await cookies();
+  const session = cookieStore.get(COOKIE_NAME);
+  
+  if (session && session.value) {
+    try {
+      const db = await getDb();
+      await db.run('DELETE FROM admin_sessions WHERE session_id = ?', session.value);
+    } catch (err) {
+      console.error('Error deleting session from db:', err);
+    }
+  }
+
   cookieStore.delete(COOKIE_NAME);
 }

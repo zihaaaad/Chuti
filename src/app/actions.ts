@@ -12,31 +12,39 @@ import bcrypt from 'bcryptjs';
 // HELPERS & SECURITY
 // ----------------------------------------------------
 
-// In-memory rate limiting map for login attempts
-const loginAttemptsMap = new Map<string, { count: number; lockedUntil: number }>();
+// Global in-memory rate limiting for admin login
+let globalFailedAttempts = 0;
+let globalLockedUntil = 0;
 
-function checkRateLimit(ip: string): { allowed: boolean; waitTimeSeconds: number } {
+function checkRateLimit(): { allowed: boolean; waitTimeSeconds: number } {
   const now = Date.now();
-  const record = loginAttemptsMap.get(ip);
-  if (record && record.lockedUntil > now) {
-    return { allowed: false, waitTimeSeconds: Math.ceil((record.lockedUntil - now) / 1000) };
+  if (globalLockedUntil > now) {
+    return { allowed: false, waitTimeSeconds: Math.ceil((globalLockedUntil - now) / 1000) };
   }
   return { allowed: true, waitTimeSeconds: 0 };
 }
 
-function recordLoginAttempt(ip: string, success: boolean) {
+function recordLoginAttempt(success: boolean) {
   const now = Date.now();
-  const record = loginAttemptsMap.get(ip) || { count: 0, lockedUntil: 0 };
   if (success) {
-    loginAttemptsMap.delete(ip);
+    globalFailedAttempts = 0;
+    globalLockedUntil = 0;
   } else {
-    record.count += 1;
-    if (record.count >= 10) {
-      record.lockedUntil = now + 5 * 60 * 1000; // 5 minute lock
-      record.count = 0; // Reset attempts after locking
+    globalFailedAttempts += 1;
+    if (globalFailedAttempts >= 10) {
+      globalLockedUntil = now + 5 * 60 * 1000; // 5 minute global lock
+      globalFailedAttempts = 0; // Reset attempts after locking
     }
-    loginAttemptsMap.set(ip, record);
   }
+}
+
+// Helper to sanitize raw database error messages
+function sanitizeError(err: any, defaultMsg: string): string {
+  const msg = err.message || '';
+  if (msg.toLowerCase().includes('sqlite') || msg.toLowerCase().includes('database')) {
+    return defaultMsg;
+  }
+  return msg || defaultMsg;
 }
 
 // Input length validation helper
@@ -116,7 +124,7 @@ function hasOverlapConflict(
 // Asynchronous file unlinking helper to avoid blocking the event loop
 async function deleteFile(filePath: string) {
   if (!filePath) return;
-  const filename = filePath.replace('/uploads/', '').replace('/api/uploads/', '');
+  const filename = path.basename(filePath.replace('/uploads/', '').replace('/api/uploads/', ''));
   const dataDir = process.env.APP_DATA_DIR || process.cwd();
   const uploadsDir = path.join(dataDir, process.env.APP_DATA_DIR ? 'uploads' : 'public/uploads');
   const fullPath = path.join(uploadsDir, filename);
@@ -158,10 +166,7 @@ async function saveFile(file: File | null): Promise<string | null> {
 // 1. AUTHENTICATION ACTIONS
 // ----------------------------------------------------
 export async function handleLogin(prevState: any, formData: FormData) {
-  const reqHeaders = await headers();
-  const ip = reqHeaders.get('x-forwarded-for') || 'local';
-
-  const rateCheck = checkRateLimit(ip);
+  const rateCheck = checkRateLimit();
   if (!rateCheck.allowed) {
     return { success: false, error: `Too many login failures. Locked out. Please try again in ${rateCheck.waitTimeSeconds} seconds.` };
   }
@@ -176,7 +181,7 @@ export async function handleLogin(prevState: any, formData: FormData) {
   }
   
   const ok = await loginAdmin(password);
-  recordLoginAttempt(ip, ok);
+  recordLoginAttempt(ok);
 
   if (ok) {
     return { success: true };
@@ -264,7 +269,7 @@ export async function addEmployee(formData: FormData) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch (e) {}
-    return { success: false, error: err.message || 'Database error occurred.' };
+    return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
 
@@ -336,7 +341,7 @@ export async function updateEmployee(formData: FormData) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch (e) {}
-    return { success: false, error: err.message || 'Database error occurred.' };
+    return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
 
@@ -372,7 +377,7 @@ export async function deleteEmployee(id: number) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch (e) {}
-    return { success: false, error: err.message };
+    return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
 
@@ -387,8 +392,6 @@ export async function calculateLeaveDays(
   leaveType: string,
   isHalfDay: boolean
 ): Promise<number> {
-  if (isHalfDay) return 0.5;
-
   const start = parseUTCDate(startDateStr);
   const end = parseUTCDate(endDateStr);
   
@@ -410,6 +413,7 @@ export async function calculateLeaveDays(
 
   // If sandwich rule is ON, it's just raw calendar days
   if (sandwichRule) {
+    if (isHalfDay) return 0.5;
     const timeDiff = end.getTime() - start.getTime();
     return Math.floor(timeDiff / (1000 * 3600 * 24)) + 1;
   }
@@ -446,6 +450,10 @@ export async function calculateLeaveDays(
     }
     
     current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  if (isHalfDay) {
+    return count > 0 ? 0.5 : 0;
   }
 
   return count;
@@ -580,7 +588,7 @@ export async function addLeaveRecord(formData: FormData) {
       await deleteFile(newSavedFile);
     }
 
-    return { success: false, error: err.message || 'Failed to record leave.' };
+    return { success: false, error: sanitizeError(err, 'Failed to record leave.') };
   }
 }
 
@@ -625,7 +633,7 @@ export async function deleteLeaveRecord(id: number) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch (e) {}
-    return { success: false, error: err.message };
+    return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
 
@@ -797,7 +805,7 @@ export async function updateLeaveRecord(formData: FormData) {
       await deleteFile(newSavedFile);
     }
 
-    return { success: false, error: err.message || 'Failed to update leave record.' };
+    return { success: false, error: sanitizeError(err, 'Failed to update leave record.') };
   }
 }
 

@@ -63,6 +63,8 @@ export async function getDb(): Promise<Database> {
   // Backup the database on startup before opening the connection (run only once per process)
   if (!(global as any).backupPerformed) {
     backupDatabase();
+    // Schedule periodic backup every 12 hours (43200000 ms)
+    setInterval(backupDatabase, 12 * 60 * 60 * 1000);
     (global as any).backupPerformed = true;
   }
 
@@ -149,6 +151,11 @@ export async function getDb(): Promise<Database> {
     CREATE INDEX IF NOT EXISTS idx_leave_records_employee_id ON leave_records (employee_id);
     CREATE INDEX IF NOT EXISTS idx_leave_records_dates ON leave_records (start_date, end_date);
     CREATE INDEX IF NOT EXISTS idx_employees_status ON employees (status);
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      session_id TEXT PRIMARY KEY,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Run safe schema migrations (adds columns to existing DB files if code updates)
