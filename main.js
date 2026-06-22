@@ -78,6 +78,9 @@ function findFreePort(startPort) {
     let port = startPort;
 
     function tryPort() {
+      if (port > startPort + 100) {
+        return reject(new Error('Could not find a free port in range 3000–3100'));
+      }
       const srv = net.createServer();
       srv.once('error', () => { port += 1; tryPort(); });
       srv.once('listening', () => {
@@ -86,11 +89,7 @@ function findFreePort(startPort) {
       srv.listen(port, '0.0.0.0');
     }
 
-    if (port > startPort + 100) {
-      reject(new Error('Could not find a free port in range 3000–3100'));
-    } else {
-      tryPort();
-    }
+    tryPort();
   });
 }
 
@@ -160,6 +159,7 @@ function spawnServer(port, appDataDir) {
 
   const env = {
     ...process.env,
+    ELECTRON_RUN_AS_NODE: '1',
     PORT:         String(port),
     HOSTNAME:     '0.0.0.0',
     APP_DATA_DIR: appDataDir,
