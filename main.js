@@ -96,6 +96,16 @@ function findFreePort(startPort) {
 // ─── LAN IP helper ────────────────────────────────────────────────────────────
 function getLanIP() {
   const ifaces = os.networkInterfaces();
+  const ignorePatterns = [/vEthernet/i, /VirtualBox/i, /VMware/i, /WSL/i];
+  
+  for (const name of Object.keys(ifaces)) {
+    if (ignorePatterns.some(p => p.test(name))) continue;
+    for (const iface of ifaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  
+  // Fallback if all external interfaces match ignore patterns
   for (const name of Object.keys(ifaces)) {
     for (const iface of ifaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) return iface.address;

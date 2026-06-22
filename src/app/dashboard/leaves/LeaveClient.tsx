@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { addLeaveRecord, deleteLeaveRecord, logLeaveEncashment, updateLeaveRecord } from '@/app/actions';
-import { CalendarRange, X, Check, FileDown, PlusCircle, Trash2, Search, DollarSign, Edit2, Eye } from 'lucide-react';
+import { CalendarRange, X, Check, FileDown, Trash2, Search, DollarSign, Edit2, Eye } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { updateSystemSettings, addHoliday, deleteHoliday, addDepartment, deleteDepartment } from '@/app/actions';
-import { Settings, Lock, Check, PlusCircle, Trash2, Calendar, Briefcase, FileText, X, Plus } from 'lucide-react';
+import { Settings, Lock, Check, Trash2, Calendar, Briefcase, X, Plus } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 
@@ -32,9 +32,13 @@ export default function SettingsClient({
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
-  const [settings, setSettings] = useState(initialSettings);
-  const [holidays, setHolidays] = useState(initialHolidays);
-  const [departments, setDepartments] = useState(initialDepartments);
+
+
+
+
+  const settings = initialSettings;
+  const holidays = initialHolidays;
+  const departments = initialDepartments;
 
   // System Settings Form States
   const [instituteName, setInstituteName] = useState(settings['institute_name'] || '');

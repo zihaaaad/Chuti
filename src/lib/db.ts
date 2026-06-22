@@ -101,18 +101,77 @@ export async function getDb(): Promise<Database> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE NOT NULL
     );
+  `);
 
+  // Create or migrate employees table to use department_id
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS employees (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      employee_id TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
+      employee_id TEXT UNIQUE NOT NULL,
+      department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
       designation TEXT NOT NULL,
-      department TEXT NOT NULL,
-      joining_date DATE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      join_date TEXT NOT NULL,
       phone TEXT,
       status TEXT DEFAULT 'Active'
-    );
+    )
+  `);
 
+  // Schema Migration: Convert text 'department' column to 'department_id' foreign key if needed
+  const columns = await db.all("PRAGMA table_info(employees)");
+  const hasTextDepartment = columns.some((col: any) => col.name === 'department');
+  if (hasTextDepartment) {
+    console.log("Migrating employees table from text 'department' to 'department_id'...");
+    
+    // Ensure all text departments exist in departments table
+    const uniqueDepts = await db.all("SELECT DISTINCT department FROM employees WHERE department IS NOT NULL");
+    for (const row of uniqueDepts) {
+      await db.run("INSERT OR IGNORE INTO departments (name) VALUES (?)", row.department);
+    }
+
+    // Check if phone exists in old table
+    const hasPhone = columns.some((col: any) => col.name === 'phone');
+
+    // Create new table
+    await db.exec(`
+      CREATE TABLE employees_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        employee_id TEXT UNIQUE NOT NULL,
+        department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
+        designation TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        join_date TEXT NOT NULL,
+        phone TEXT,
+        status TEXT DEFAULT 'Active'
+      )
+    `);
+
+    // Copy data mapping text names to IDs
+    if (hasPhone) {
+      await db.exec(`
+        INSERT INTO employees_new (id, name, employee_id, department_id, designation, email, join_date, phone, status)
+        SELECT e.id, e.name, e.employee_id, d.id, e.designation, e.email, e.join_date, e.phone, e.status
+        FROM employees e
+        LEFT JOIN departments d ON e.department = d.name
+      `);
+    } else {
+      await db.exec(`
+        INSERT INTO employees_new (id, name, employee_id, department_id, designation, email, join_date, status)
+        SELECT e.id, e.name, e.employee_id, d.id, e.designation, e.email, e.join_date, e.status
+        FROM employees e
+        LEFT JOIN departments d ON e.department = d.name
+      `);
+    }
+
+    // Swap tables
+    await db.exec("DROP TABLE employees");
+    await db.exec("ALTER TABLE employees_new RENAME TO employees");
+    console.log("Migration complete.");
+  }
+
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS leave_balances (
       employee_id INTEGER NOT NULL,
       leave_type TEXT NOT NULL,
@@ -159,10 +218,10 @@ export async function getDb(): Promise<Database> {
   `);
 
   // Run safe schema migrations (adds columns to existing DB files if code updates)
-  try { await db.exec('ALTER TABLE employees ADD COLUMN phone TEXT;'); } catch (e) {}
-  try { await db.exec('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active";'); } catch (e) {}
-  try { await db.exec('ALTER TABLE leave_balances ADD COLUMN encashed_days REAL DEFAULT 0;'); } catch (e) {}
-  try { await db.exec('ALTER TABLE leave_records ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'); } catch (e) {}
+  try { await db.exec('ALTER TABLE employees ADD COLUMN phone TEXT;'); } catch {}
+  try { await db.exec('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active";'); } catch {}
+  try { await db.exec('ALTER TABLE leave_balances ADD COLUMN encashed_days REAL DEFAULT 0;'); } catch {}
+  try { await db.exec('ALTER TABLE leave_records ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'); } catch {}
 
   // Seed default settings if they do not exist
   const settingsCount = await db.get('SELECT COUNT(*) as count FROM system_settings');

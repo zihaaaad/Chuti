@@ -40,7 +40,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
-  const [employees, setEmployees] = useState(initialEmployees);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);

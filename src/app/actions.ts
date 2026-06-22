@@ -3,7 +3,6 @@
 import fs from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
-import { headers } from 'next/headers';
 import { getDb } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
@@ -243,11 +242,17 @@ export async function addEmployee(formData: FormData) {
 
     await db.run('BEGIN IMMEDIATE');
 
+    let dept = await db.get('SELECT id FROM departments WHERE name = ?', department);
+    if (!dept) {
+      const res = await db.run('INSERT INTO departments (name) VALUES (?)', department);
+      dept = { id: res.lastID };
+    }
+
     // Insert employee
     const result = await db.run(
-      `INSERT INTO employees (employee_id, name, designation, department, joining_date, phone)
+      `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [employee_id, name, designation, department, joining_date, phone]
+      [employee_id, name, designation, dept.id, joining_date, phone]
     );
 
     const empId = result.lastID;
@@ -268,7 +273,7 @@ export async function addEmployee(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
@@ -320,11 +325,17 @@ export async function updateEmployee(formData: FormData) {
 
     await db.run('BEGIN IMMEDIATE');
 
+    let dept = await db.get('SELECT id FROM departments WHERE name = ?', department);
+    if (!dept) {
+      const res = await db.run('INSERT INTO departments (name) VALUES (?)', department);
+      dept = { id: res.lastID };
+    }
+
     await db.run(
       `UPDATE employees 
-       SET employee_id = ?, name = ?, designation = ?, department = ?, joining_date = ?, phone = ?, status = ?
+       SET employee_id = ?, name = ?, designation = ?, department_id = ?, join_date = ?, phone = ?, status = ?
        WHERE id = ?`,
-      [employee_id, name, designation, department, joining_date, phone, status, id]
+      [employee_id, name, designation, dept.id, joining_date, phone, status, id]
     );
 
     // Update allocations
@@ -340,7 +351,7 @@ export async function updateEmployee(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
@@ -376,7 +387,7 @@ export async function deleteEmployee(id: number) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
@@ -581,7 +592,7 @@ export async function addLeaveRecord(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
 
     // Cleanup newly saved file if transaction failed to prevent disk pollution
     if (newSavedFile) {
@@ -632,7 +643,7 @@ export async function deleteLeaveRecord(id: number) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: sanitizeError(err, 'Database error occurred.') };
   }
 }
@@ -798,7 +809,7 @@ export async function updateLeaveRecord(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
 
     // Cleanup newly saved file if transaction fails
     if (newSavedFile) {
@@ -877,7 +888,7 @@ export async function recordLateAttendance(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: err.message || 'Failed to record late attendance.' };
   }
 }
@@ -943,7 +954,7 @@ export async function logLeaveEncashment(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: err.message || 'Failed to log leave encashment.' };
   }
 }
@@ -1019,7 +1030,7 @@ export async function updateSystemSettings(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: err.message || 'Failed to update settings.' };
   }
 }
@@ -1118,7 +1129,7 @@ export async function deleteDepartment(id: number) {
     }
 
     // Check if any employee is in this department
-    const employee = await db.get('SELECT id FROM employees WHERE department = ?', dept.name);
+    const employee = await db.get('SELECT id FROM employees WHERE department_id = ?', id);
     if (employee) {
       return { 
         success: false, 
@@ -1190,6 +1201,8 @@ export async function importEmployeesFromCSV(formData: FormData) {
 
       // Ensure department exists in departments table
       await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', department.trim());
+      const dept = await db.get('SELECT id FROM departments WHERE name = ?', department.trim());
+      const deptId = dept ? dept.id : null;
 
       const existing = await db.get('SELECT id FROM employees WHERE employee_id = ?', employee_id);
       if (existing) {
@@ -1198,9 +1211,9 @@ export async function importEmployeesFromCSV(formData: FormData) {
       }
 
       const result = await db.run(
-        `INSERT INTO employees (employee_id, name, designation, department, joining_date, phone)
+        `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [employee_id, name, designation, department, joining_date, phone]
+        [employee_id, name, designation, deptId, joining_date, phone]
       );
 
       const empId = result.lastID;
@@ -1221,7 +1234,7 @@ export async function importEmployeesFromCSV(formData: FormData) {
     try {
       const db = await getDb();
       await db.run('ROLLBACK');
-    } catch (e) {}
+    } catch {}
     return { success: false, error: err.message || 'CSV Import failed.' };
   }
 }

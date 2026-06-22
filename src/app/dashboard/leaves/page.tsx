@@ -26,6 +26,7 @@ export default async function LeavesPage() {
     FROM leave_records r
     JOIN employees e ON r.employee_id = e.id
     ORDER BY r.recorded_at DESC
+    LIMIT 1000
   `);
 
   return (

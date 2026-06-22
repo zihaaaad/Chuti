@@ -37,9 +37,10 @@ export default async function DashboardPage() {
 
   // 2. Fetch Active Absences (Who is on leave today)
   const activeAbsences = await db.all(
-    `SELECT e.name, e.designation, e.department, r.leave_type, r.start_date, r.end_date, r.actual_days 
+    `SELECT e.name, e.designation, d.name as department, r.leave_type, r.start_date, r.end_date, r.actual_days 
      FROM leave_records r 
      JOIN employees e ON r.employee_id = e.id 
+     LEFT JOIN departments d ON e.department_id = d.id
      WHERE ? BETWEEN r.start_date AND r.end_date
      ORDER BY r.recorded_at DESC`,
     [todayStr]
