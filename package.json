@@ -1,14 +1,84 @@
 {
   "name": "chuti",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Offline-first Leave Management System for small organisations",
   "private": true,
+  "main": "main.js",
+  "author": {
+    "name": "Chuti Dev",
+    "email": "dev@chuti.app"
+  },
   "scripts": {
     "dev": "next dev",
     "dev-lan": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "start-lan": "next start -H 0.0.0.0",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron-dev": "electron .",
+    "build-exe": "npm run build && electron-builder --win --x64",
+    "build-exe-publish": "npm run build && electron-builder --win --x64 --publish always"
+  },
+  "build": {
+    "appId": "app.chuti.leave-management",
+    "productName": "Chuti",
+    "copyright": "Copyright © 2025 Chuti",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "public/**/*",
+      "!public/uploads/**"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "server",
+        "filter": ["**/*"]
+      },
+      {
+        "from": ".next/static",
+        "to": "server/.next/static",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "public",
+        "to": "server/public",
+        "filter": ["**/*", "!uploads/**"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Chuti",
+      "include": "installer.nsh"
+    },
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
+    }
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -25,8 +95,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sqlite3": "^3.1.11",
+    "electron": "^36.3.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
   }
 }

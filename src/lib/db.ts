@@ -4,9 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
-// Setup database file path
-const DB_PATH = path.join(process.cwd(), 'database.db');
-const BACKUP_DIR = path.join(process.cwd(), 'backups');
+// Setup database file path (Supports Electron APP_DATA_DIR)
+const dataDir = process.env.APP_DATA_DIR || process.cwd();
+const DB_PATH = path.join(dataDir, 'database.db');
+const BACKUP_DIR = path.join(dataDir, 'backups');
 
 let dbInstance: Database | null = null;
 

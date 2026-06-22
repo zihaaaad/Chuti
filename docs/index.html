@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chuti — Leave Management System | Free Download</title>
+  <meta name="description" content="Chuti is a free, offline-first Leave Management System for small organisations. Download the Windows installer and manage employee leave without any cloud dependency." />
+  <meta property="og:title" content="Chuti — Leave Management System" />
+  <meta property="og:description" content="Free offline Leave Management System for small teams. No cloud, no subscription." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b1120;
+      --bg2:       #111827;
+      --bg3:       #1a2540;
+      --border:    rgba(56,189,248,0.15);
+      --accent:    #38bdf8;
+      --accent2:   #818cf8;
+      --success:   #34d399;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --card-bg:   rgba(17,24,39,0.8);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(11,17,32,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; }
+    .nav-logo span { font-size: 1.5rem; }
+    .nav-logo strong { font-size: 1.2rem; color: var(--accent); font-weight: 800; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+    nav a:hover { color: var(--text); }
+    .nav-links { display: flex; gap: 2rem; }
+
+    /* ── Hero ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 8rem 2rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -20%; left: 50%; transform: translateX(-50%);
+      width: 900px; height: 900px;
+      background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3);
+      padding: 0.4rem 1rem; border-radius: 999px;
+      font-size: 0.8rem; color: var(--accent); font-weight: 600; letter-spacing: 0.05em;
+      margin-bottom: 1.5rem;
+      animation: fadeDown 0.6s ease both;
+    }
+    .hero h1 {
+      font-size: clamp(2.8rem, 7vw, 5.5rem);
+      font-weight: 900; line-height: 1.05; letter-spacing: -0.03em;
+      margin-bottom: 1.2rem;
+      animation: fadeDown 0.7s ease 0.1s both;
+    }
+    .hero h1 .highlight {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      color: var(--muted); max-width: 600px;
+      margin-bottom: 2.5rem;
+      animation: fadeDown 0.7s ease 0.2s both;
+    }
+    .hero-actions {
+      display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+      animation: fadeDown 0.7s ease 0.3s both;
+    }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: linear-gradient(135deg, var(--accent), #0ea5e9);
+      color: #0b1120; font-weight: 700; font-size: 1rem;
+      padding: 0.9rem 2rem; border-radius: 12px;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 0 30px rgba(56,189,248,0.3);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 45px rgba(56,189,248,0.5); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: transparent; color: var(--text); font-weight: 600; font-size: 1rem;
+      padding: 0.9rem 2rem; border-radius: 12px;
+      text-decoration: none; border: 1px solid var(--border);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--accent); background: rgba(56,189,248,0.05); }
+
+    .hero-meta {
+      margin-top: 2rem; display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center;
+      font-size: 0.85rem; color: var(--muted);
+      animation: fadeDown 0.7s ease 0.4s both;
+    }
+    .hero-meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+    /* ── Screenshots ── */
+    .screenshot-section {
+      padding: 4rem 2rem;
+      display: flex; flex-direction: column; align-items: center; gap: 2rem;
+    }
+    .screenshot-frame {
+      width: 100%; max-width: 1000px;
+      border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+      background: var(--bg2);
+    }
+    .window-bar {
+      height: 40px; background: var(--bg3);
+      display: flex; align-items: center; padding: 0 1rem; gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #ffbd2e; }
+    .dot-g { background: #28c840; }
+    .window-title { margin-left: auto; margin-right: auto; font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+    .app-preview {
+      padding: 2rem;
+      display: grid; grid-template-columns: 200px 1fr; gap: 1.5rem;
+      min-height: 360px;
+    }
+    .sidebar-preview {
+      background: rgba(56,189,248,0.04); border-right: 1px solid var(--border);
+      border-radius: 8px; padding: 1.5rem 1rem;
+      display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .sidebar-item {
+      padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.85rem;
+      color: var(--muted); display: flex; align-items: center; gap: 0.6rem;
+    }
+    .sidebar-item.active { background: rgba(56,189,248,0.15); color: var(--accent); }
+    .content-preview { display: flex; flex-direction: column; gap: 1rem; }
+    .stat-row { display: flex; gap: 1rem; }
+    .stat-card {
+      flex: 1; background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem 1.2rem;
+    }
+    .stat-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
+    .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
+    .stat-value.green { color: var(--success); }
+    .stat-value.purple { color: var(--accent2); }
+    .table-preview {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .table-row {
+      display: flex; gap: 1rem; padding: 0.7rem 1rem;
+      font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.04);
+      align-items: center;
+    }
+    .table-row.header { color: var(--muted); font-weight: 600; background: rgba(255,255,255,0.02); }
+    .badge {
+      padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+    }
+    .badge-green { background: rgba(52,211,153,0.15); color: var(--success); }
+    .badge-yellow { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .badge-blue { background: rgba(56,189,248,0.15); color: var(--accent); }
+
+    /* ── Features ── */
+    .section { padding: 6rem 2rem; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+    .section-tag {
+      display: inline-block; font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 0.8rem;
+    }
+    .section-title {
+      font-size: clamp(2rem, 4vw, 3rem); font-weight: 800;
+      letter-spacing: -0.02em; margin-bottom: 1rem;
+    }
+    .section-sub { font-size: 1.1rem; color: var(--muted); max-width: 550px; margin-bottom: 3.5rem; }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.8rem;
+      transition: border-color 0.3s, transform 0.3s;
+      backdrop-filter: blur(8px);
+    }
+    .feature-card:hover { border-color: rgba(56,189,248,0.4); transform: translateY(-4px); }
+    .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .feature-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.7; }
+
+    /* ── Install steps ── */
+    .steps-grid { display: flex; flex-direction: column; gap: 1.5rem; max-width: 680px; }
+    .step {
+      display: flex; gap: 1.5rem; align-items: flex-start;
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.5rem;
+    }
+    .step-num {
+      min-width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #0ea5e9);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 1rem; color: #0b1120;
+    }
+    .step h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .step p { font-size: 0.88rem; color: var(--muted); }
+
+    /* ── Download CTA ── */
+    .cta {
+      padding: 6rem 2rem; text-align: center;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg3) 50%, var(--bg) 100%);
+    }
+    .cta h2 { font-size: clamp(2rem, 4vw, 3rem); font-weight: 900; margin-bottom: 1rem; }
+    .cta p { font-size: 1.1rem; color: var(--muted); margin-bottom: 2rem; }
+    .release-info {
+      display: inline-flex; align-items: center; gap: 0.8rem;
+      background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3);
+      padding: 0.5rem 1.2rem; border-radius: 999px;
+      font-size: 0.85rem; color: var(--success); font-weight: 600;
+      margin-bottom: 2rem;
+    }
+    .download-options { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+
+    /* ── Footer ── */
+    footer {
+      padding: 2.5rem 2rem; border-top: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; gap: 1rem;
+      align-items: center; justify-content: space-between;
+      max-width: 1100px; margin: 0 auto;
+    }
+    footer p { font-size: 0.85rem; color: var(--muted); }
+    footer a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    footer a:hover { color: var(--text); }
+    .footer-links { display: flex; gap: 1.5rem; }
+
+    /* ── Animations ── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.6; }
+    }
+    .live-dot {
+      width: 8px; height: 8px; background: var(--success); border-radius: 50%;
+      animation: pulse 1.5s ease infinite;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 680px) {
+      .nav-links { display: none; }
+      .app-preview { grid-template-columns: 1fr; }
+      .sidebar-preview { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <a href="#" class="nav-logo">
+    <span>🌴</span>
+    <strong>Chuti</strong>
+  </a>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="#download">Download</a>
+    <a href="https://github.com/zihadmahiuddin/Chuti" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge">
+    <div class="live-dot"></div>
+    Version 1.0.0 — Free &amp; Open Source
+  </div>
+  <h1>Leave Management,<br><span class="highlight">Without the Cloud</span></h1>
+  <p>Chuti is a fully offline, self-hosted leave management system for small teams. Install it once, own your data forever. No subscription, no internet required.</p>
+  <div class="hero-actions">
+    <a href="https://github.com/zihadmahiuddin/Chuti/releases/latest/download/Chuti-Setup.exe" id="hero-download-btn" class="btn-primary">
+      ⬇ Download for Windows
+    </a>
+    <a href="https://github.com/zihadmahiuddin/Chuti" id="view-source-btn" class="btn-secondary" target="_blank" rel="noopener">
+      ☆ View on GitHub
+    </a>
+  </div>
+  <div class="hero-meta">
+    <span>✅ Windows 10 / 11</span>
+    <span>🔒 100% Offline</span>
+    <span>⚡ LAN Sharing Built-in</span>
+    <span>🆓 Completely Free</span>
+  </div>
+</section>
+
+<!-- App Screenshot Preview -->
+<section class="screenshot-section">
+  <div class="screenshot-frame">
+    <div class="window-bar">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+      <div class="window-title">Chuti — Leave Management · Network: http://192.168.1.15:3000</div>
+    </div>
+    <div class="app-preview">
+      <div class="sidebar-preview">
+        <div class="sidebar-item active">📊 Dashboard</div>
+        <div class="sidebar-item">👥 Employees</div>
+        <div class="sidebar-item">📋 Leave Records</div>
+        <div class="sidebar-item">🗓 Holidays</div>
+        <div class="sidebar-item">⚙ Settings</div>
+      </div>
+      <div class="content-preview">
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-label">Total Employees</div>
+            <div class="stat-value">24</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">On Leave Today</div>
+            <div class="stat-value green">3</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Leaves This Month</div>
+            <div class="stat-value purple">18</div>
+          </div>
+        </div>
+        <div class="table-preview">
+          <div class="table-row header">
+            <span style="flex:2">Employee</span>
+            <span style="flex:1.5">Leave Type</span>
+            <span style="flex:1">Days</span>
+            <span style="flex:1">Status</span>
+          </div>
+          <div class="table-row">
+            <span style="flex:2">Rahim Ahmed</span>
+            <span style="flex:1.5">Annual Leave</span>
+            <span style="flex:1">3</span>
+            <span style="flex:1"><span class="badge badge-green">Active</span></span>
+          </div>
+          <div class="table-row">
+            <span style="flex:2">Karim Hossain</span>
+            <span style="flex:1.5">Sick Leave</span>
+            <span style="flex:1">1</span>
+            <span style="flex:1"><span class="badge badge-yellow">Half Day</span></span>
+          </div>
+          <div class="table-row">
+            <span style="flex:2">Fatema Begum</span>
+            <span style="flex:1.5">Casual Leave</span>
+            <span style="flex:1">2</span>
+            <span style="flex:1"><span class="badge badge-blue">Recorded</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+  <div class="section-inner">
+    <span class="section-tag">Why Chuti?</span>
+    <h2 class="section-title">Everything you need,<br>nothing you don't</h2>
+    <p class="section-sub">Built specifically for small organisations that need a reliable, no-fuss leave tracking system without ongoing cloud costs.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Fully Offline</h3>
+        <p>Your data never leaves your building. All records are stored in a local SQLite database that you fully control.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <h3>LAN Sharing</h3>
+        <p>Install on one PC and every colleague on the same Wi-Fi can access it from their browser. No extra setup required.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📂</div>
+        <h3>Choose Your Data Folder</h3>
+        <p>Pick exactly where your database, backups, and uploaded documents are saved. Full control, no surprises.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>Auto Daily Backups</h3>
+        <p>The database is automatically backed up every time the application starts. Up to 30 rolling backups are kept.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Leave Analytics</h3>
+        <p>Real-time dashboard with leave balance tracking, late deductions, sandwich rule enforcement, and holiday management.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📎</div>
+        <h3>Document Attachments</h3>
+        <p>Attach medical certificates and other files to leave records. All uploads are stored in your chosen data folder.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🖱</div>
+        <h3>One-Click Install</h3>
+        <p>Download the installer, run it, choose a data folder on first launch — and you're ready. No command line, no Node.js needed.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🆓</div>
+        <h3>Free Forever</h3>
+        <p>Open-source, MIT licensed. No trial periods, no seat limits, no hidden costs. Fork it, modify it, make it yours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Installation Steps -->
+<section class="section" id="install" style="background: var(--bg2);">
+  <div class="section-inner" style="display:grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start;">
+    <div>
+      <span class="section-tag">Get Started</span>
+      <h2 class="section-title">Up and running<br>in 60 seconds</h2>
+      <p class="section-sub">No developer experience required. If you can install any Windows program, you can install Chuti.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <h3>Download the installer</h3>
+          <p>Click the Download button and save <code>Chuti-Setup.exe</code> to your computer.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <h3>Run Chuti Setup.exe</h3>
+          <p>Double-click the installer. Windows may show a SmartScreen prompt — click "More info → Run anyway" (the app is unsigned but safe).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <h3>Choose your data folder</h3>
+          <p>On first launch, a dialog will ask you to choose a folder for your database and files. Pick any folder you like (e.g. Documents\ChutiData).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div>
+          <h3>Share the LAN URL with your team</h3>
+          <p>A popup will show the Network URL (e.g. <code>http://192.168.1.x:3000</code>). Share this with colleagues on the same Wi-Fi.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Download CTA -->
+<section class="cta" id="download">
+  <div class="release-info">
+    <div class="live-dot"></div>
+    Latest Release: v1.0.0
+  </div>
+  <h2>Ready to get started?</h2>
+  <p>Download Chuti for Windows — free, forever.</p>
+  <div class="download-options">
+    <a href="https://github.com/zihadmahiuddin/Chuti/releases/latest/download/Chuti-Setup.exe" id="cta-download-btn" class="btn-primary">
+      ⬇ &nbsp;Download Installer (.exe) &nbsp;~130 MB
+    </a>
+    <a href="https://github.com/zihadmahiuddin/Chuti/releases/latest/download/Chuti-Portable.exe" id="cta-portable-btn" class="btn-secondary">
+      📦 &nbsp;Portable Version
+    </a>
+  </div>
+  <p style="margin-top:1.5rem; font-size:0.82rem; color:var(--muted);">
+    Windows 10 / 11 · 64-bit · No admin rights required (per-user install)
+    · <a href="https://github.com/zihadmahiuddin/Chuti/releases" style="color:var(--accent); text-decoration:none;">All releases →</a>
+  </p>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>© 2025 Chuti. MIT License. Made with ❤ for small teams.</p>
+  <div class="footer-links">
+    <a href="https://github.com/zihadmahiuddin/Chuti" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/zihadmahiuddin/Chuti/issues" target="_blank" rel="noopener">Report a Bug</a>
+    <a href="https://github.com/zihadmahiuddin/Chuti/releases" target="_blank" rel="noopener">All Releases</a>
+  </div>
+</footer>
+
+</body>
+</html>

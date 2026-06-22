@@ -47,3 +47,9 @@ database.db-wal
 database.db-shm
 /backups
 /public/uploads
+
+# Electron build output
+/dist
+
+# Icon binary (generated from PNG, not tracked)
+/public/icon.ico

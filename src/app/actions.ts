@@ -55,9 +55,12 @@ function hasOverlapConflict(
 }
 
 // Asynchronous file unlinking helper to avoid blocking the event loop
-async function safeUnlink(filePath: string | null) {
+async function deleteFile(filePath: string) {
   if (!filePath) return;
-  const fullPath = path.join(process.cwd(), 'public', filePath);
+  const filename = filePath.replace('/uploads/', '').replace('/api/uploads/', '');
+  const dataDir = process.env.APP_DATA_DIR || process.cwd();
+  const uploadsDir = path.join(dataDir, process.env.APP_DATA_DIR ? 'uploads' : 'public/uploads');
+  const fullPath = path.join(uploadsDir, filename);
   try {
     if (fs.existsSync(fullPath)) {
       await fs.promises.unlink(fullPath);
@@ -72,7 +75,8 @@ async function saveFile(file: File | null): Promise<string | null> {
   if (!file || file.size === 0 || !(file instanceof File)) return null;
   
   try {
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    const dataDir = process.env.APP_DATA_DIR || process.cwd();
+    const uploadsDir = path.join(dataDir, process.env.APP_DATA_DIR ? 'uploads' : 'public/uploads');
     if (!fs.existsSync(uploadsDir)) {
       await fs.promises.mkdir(uploadsDir, { recursive: true });
     }
@@ -259,7 +263,7 @@ export async function deleteEmployee(id: number) {
     // Unlink physical attachment files from local disk (asynchronously after successful commit)
     for (const rec of records) {
       if (rec.attachment_path) {
-        await safeUnlink(rec.attachment_path);
+        await deleteFile(rec.attachment_path);
       }
     }
 
@@ -461,7 +465,7 @@ export async function addLeaveRecord(formData: FormData) {
 
     // Cleanup newly saved file if transaction failed to prevent disk pollution
     if (newSavedFile) {
-      await safeUnlink(newSavedFile);
+      await deleteFile(newSavedFile);
     }
 
     return { success: false, error: err.message || 'Failed to record leave.' };
@@ -498,7 +502,7 @@ export async function deleteLeaveRecord(id: number) {
 
     // Delete local attachment file asynchronously after transaction commits successfully
     if (record.attachment_path) {
-      await safeUnlink(record.attachment_path);
+      await deleteFile(record.attachment_path);
     }
 
     revalidatePath('/dashboard/leaves');
@@ -654,7 +658,7 @@ export async function updateLeaveRecord(formData: FormData) {
 
     // Async delete of old physical files after commit succeeds
     for (const filePath of filesToDelete) {
-      await safeUnlink(filePath);
+      await deleteFile(filePath);
     }
 
     revalidatePath('/dashboard/leaves');
@@ -668,7 +672,7 @@ export async function updateLeaveRecord(formData: FormData) {
 
     // Cleanup newly saved file if transaction fails
     if (newSavedFile) {
-      await safeUnlink(newSavedFile);
+      await deleteFile(newSavedFile);
     }
 
     return { success: false, error: err.message || 'Failed to update leave record.' };
