@@ -14,8 +14,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const PNG_PATH = path.join(__dirname, 'public', 'icon.png');
-const ICO_PATH = path.join(__dirname, 'public', 'icon.ico');
+// Use process.cwd() so this script works correctly when run via
+// `npm run generate-ico` (cwd = project root) regardless of __dirname
+const ROOT     = process.cwd();
+const PNG_PATH = path.join(ROOT, 'public', 'icon.png');
+const ICO_PATH = path.join(ROOT, 'public', 'icon.ico');
 
 if (!fs.existsSync(PNG_PATH)) {
   console.error('ERROR: public/icon.png not found. Cannot generate ICO.');
