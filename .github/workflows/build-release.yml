@@ -45,7 +45,11 @@ jobs:
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
           echo "Building version: $version"
 
-      # ── 6. Build Windows installer + portable EXE ─────────────────────────
+      # ── 6. Generate icon.ico from icon.png (NSIS requires a real ICO) ──────
+      - name: Generate icon.ico
+        run: node scripts/generate-ico.js
+
+      # ── 7. Build Windows installer + portable EXE ─────────────────────────
       - name: Build Electron Windows EXE
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

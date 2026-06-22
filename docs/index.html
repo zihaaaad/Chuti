@@ -3,280 +3,911 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chuti — Leave Management System | Free Download</title>
-  <meta name="description" content="Chuti is a free, offline-first Leave Management System for small organisations. Download the Windows installer and manage employee leave without any cloud dependency." />
+  <title>Chuti — Leave Management System</title>
+  <meta name="description" content="Chuti is a free, offline-first leave management system for small organisations. No cloud. No subscription. Just install and run." />
   <meta property="og:title" content="Chuti — Leave Management System" />
-  <meta property="og:description" content="Free offline Leave Management System for small teams. No cloud, no subscription." />
+  <meta property="og:description" content="Free offline leave management for small teams. No cloud, no subscription." />
   <meta property="og:type" content="website" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     :root {
-      --bg:        #0b1120;
-      --bg2:       #111827;
-      --bg3:       #1a2540;
-      --border:    rgba(56,189,248,0.15);
-      --accent:    #38bdf8;
-      --accent2:   #818cf8;
-      --success:   #34d399;
-      --text:      #e2e8f0;
-      --muted:     #94a3b8;
-      --card-bg:   rgba(17,24,39,0.8);
+      --white:       #ffffff;
+      --gray-50:     #f9fafb;
+      --gray-100:    #f3f4f6;
+      --gray-200:    #e5e7eb;
+      --gray-300:    #d1d5db;
+      --gray-400:    #9ca3af;
+      --gray-500:    #6b7280;
+      --gray-600:    #4b5563;
+      --gray-700:    #374151;
+      --gray-800:    #1f2937;
+      --gray-900:    #111827;
+      --black:       #030712;
+      --accent:      #2563eb;
+      --accent-dark: #1d4ed8;
+      --accent-light: #eff6ff;
+      --radius:      6px;
+      --radius-lg:   12px;
     }
 
-    html { scroll-behavior: smooth; }
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
 
     body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--white);
+      color: var(--gray-900);
       line-height: 1.6;
-      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
-    /* ── Nav ── */
+    /* ── Navigation ── */
     nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 1rem 2rem;
-      background: rgba(11,17,32,0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--gray-200);
     }
-    .nav-logo { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; }
-    .nav-logo span { font-size: 1.5rem; }
-    .nav-logo strong { font-size: 1.2rem; color: var(--accent); font-weight: 800; }
-    nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-    nav a:hover { color: var(--text); }
-    .nav-links { display: flex; gap: 2rem; }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: var(--gray-900);
+    }
+
+    .logo-mark {
+      width: 28px;
+      height: 28px;
+      background: var(--gray-900);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-mark svg {
+      width: 16px;
+      height: 16px;
+      fill: white;
+    }
+
+    .logo-text {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--gray-900);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .nav-link {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--gray-500);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .nav-link:hover {
+      color: var(--gray-900);
+    }
+
+    .nav-btn {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--white);
+      background: var(--gray-900);
+      text-decoration: none;
+      padding: 0.45rem 1rem;
+      border-radius: var(--radius);
+      transition: background 0.15s;
+    }
+
+    .nav-btn:hover {
+      background: var(--gray-700);
+    }
 
     /* ── Hero ── */
     .hero {
-      min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 140px 2rem 100px;
       text-align: center;
-      padding: 8rem 2rem 4rem;
-      position: relative;
-      overflow: hidden;
+      max-width: 720px;
+      margin: 0 auto;
     }
-    .hero::before {
-      content: '';
-      position: absolute; top: -20%; left: 50%; transform: translateX(-50%);
-      width: 900px; height: 900px;
-      background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
-      pointer-events: none;
-    }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 0.5rem;
-      background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3);
-      padding: 0.4rem 1rem; border-radius: 999px;
-      font-size: 0.8rem; color: var(--accent); font-weight: 600; letter-spacing: 0.05em;
+
+    .hero-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--gray-500);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
       margin-bottom: 1.5rem;
-      animation: fadeDown 0.6s ease both;
     }
+
+    .hero-label-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+
     .hero h1 {
-      font-size: clamp(2.8rem, 7vw, 5.5rem);
-      font-weight: 900; line-height: 1.05; letter-spacing: -0.03em;
-      margin-bottom: 1.2rem;
-      animation: fadeDown 0.7s ease 0.1s both;
+      font-size: clamp(2.25rem, 5vw, 3.75rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      color: var(--gray-900);
+      margin-bottom: 1.25rem;
     }
-    .hero h1 .highlight {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+
+    .hero h1 span {
+      color: var(--gray-400);
     }
+
     .hero p {
-      font-size: clamp(1rem, 2vw, 1.25rem);
-      color: var(--muted); max-width: 600px;
-      margin-bottom: 2.5rem;
-      animation: fadeDown 0.7s ease 0.2s both;
+      font-size: 1.1rem;
+      color: var(--gray-500);
+      max-width: 520px;
+      margin: 0 auto 2.5rem;
+      font-weight: 400;
+      line-height: 1.7;
     }
+
     .hero-actions {
-      display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
-      animation: fadeDown 0.7s ease 0.3s both;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
+
     .btn-primary {
-      display: inline-flex; align-items: center; gap: 0.6rem;
-      background: linear-gradient(135deg, var(--accent), #0ea5e9);
-      color: #0b1120; font-weight: 700; font-size: 1rem;
-      padding: 0.9rem 2rem; border-radius: 12px;
-      text-decoration: none; border: none; cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-      box-shadow: 0 0 30px rgba(56,189,248,0.3);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--gray-900);
+      color: var(--white);
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.7rem 1.5rem;
+      border-radius: var(--radius);
+      text-decoration: none;
+      transition: background 0.15s;
     }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 45px rgba(56,189,248,0.5); }
+
+    .btn-primary:hover {
+      background: var(--gray-700);
+    }
+
+    .btn-primary svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
     .btn-secondary {
-      display: inline-flex; align-items: center; gap: 0.6rem;
-      background: transparent; color: var(--text); font-weight: 600; font-size: 1rem;
-      padding: 0.9rem 2rem; border-radius: 12px;
-      text-decoration: none; border: 1px solid var(--border);
-      transition: border-color 0.2s, background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--white);
+      color: var(--gray-700);
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.7rem 1.5rem;
+      border-radius: var(--radius);
+      text-decoration: none;
+      border: 1px solid var(--gray-200);
+      transition: border-color 0.15s, color 0.15s;
     }
-    .btn-secondary:hover { border-color: var(--accent); background: rgba(56,189,248,0.05); }
+
+    .btn-secondary:hover {
+      border-color: var(--gray-400);
+      color: var(--gray-900);
+    }
+
+    .btn-secondary svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
 
     .hero-meta {
-      margin-top: 2rem; display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center;
-      font-size: 0.85rem; color: var(--muted);
-      animation: fadeDown 0.7s ease 0.4s both;
+      margin-top: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      flex-wrap: wrap;
     }
-    .hero-meta span { display: flex; align-items: center; gap: 0.4rem; }
 
-    /* ── Screenshots ── */
-    .screenshot-section {
-      padding: 4rem 2rem;
-      display: flex; flex-direction: column; align-items: center; gap: 2rem;
+    .hero-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--gray-400);
+      font-weight: 500;
     }
-    .screenshot-frame {
-      width: 100%; max-width: 1000px;
-      border: 1px solid var(--border);
-      border-radius: 16px; overflow: hidden;
-      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
-      background: var(--bg2);
+
+    .hero-meta-item svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
     }
-    .window-bar {
-      height: 40px; background: var(--bg3);
-      display: flex; align-items: center; padding: 0 1rem; gap: 0.5rem;
-      border-bottom: 1px solid var(--border);
+
+    /* ── App Preview ── */
+    .preview-section {
+      padding: 0 2rem 6rem;
     }
-    .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot-r { background: #ff5f57; }
-    .dot-y { background: #ffbd2e; }
-    .dot-g { background: #28c840; }
-    .window-title { margin-left: auto; margin-right: auto; font-size: 0.8rem; color: var(--muted); font-weight: 500; }
-    .app-preview {
-      padding: 2rem;
-      display: grid; grid-template-columns: 200px 1fr; gap: 1.5rem;
-      min-height: 360px;
+
+    .preview-inner {
+      max-width: 1000px;
+      margin: 0 auto;
     }
-    .sidebar-preview {
-      background: rgba(56,189,248,0.04); border-right: 1px solid var(--border);
-      border-radius: 8px; padding: 1.5rem 1rem;
-      display: flex; flex-direction: column; gap: 0.5rem;
+
+    .browser-frame {
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow:
+        0 1px 3px rgba(0,0,0,0.06),
+        0 8px 32px rgba(0,0,0,0.08),
+        0 32px 64px rgba(0,0,0,0.06);
     }
+
+    .browser-bar {
+      height: 44px;
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+      gap: 0.5rem;
+    }
+
+    .browser-dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .browser-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--gray-200);
+    }
+
+    .browser-address {
+      flex: 1;
+      margin: 0 1rem;
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: 4px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.75rem;
+      color: var(--gray-400);
+      font-family: 'Inter', monospace;
+    }
+
+    .browser-body {
+      background: var(--gray-50);
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      min-height: 380px;
+    }
+
+    .app-sidebar {
+      background: var(--white);
+      border-right: 1px solid var(--gray-100);
+      padding: 1.25rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .sidebar-section {
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-300);
+      padding: 0.5rem 0.75rem 0.25rem;
+      margin-top: 0.5rem;
+    }
+
     .sidebar-item {
-      padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.85rem;
-      color: var(--muted); display: flex; align-items: center; gap: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 5px;
+      font-size: 0.82rem;
+      color: var(--gray-500);
+      font-weight: 500;
+      cursor: default;
     }
-    .sidebar-item.active { background: rgba(56,189,248,0.15); color: var(--accent); }
-    .content-preview { display: flex; flex-direction: column; gap: 1rem; }
-    .stat-row { display: flex; gap: 1rem; }
+
+    .sidebar-item.active {
+      background: var(--gray-100);
+      color: var(--gray-900);
+    }
+
+    .sidebar-icon {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      background: currentColor;
+      opacity: 0.3;
+      flex-shrink: 0;
+    }
+
+    .sidebar-item.active .sidebar-icon {
+      opacity: 1;
+    }
+
+    .app-content {
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .content-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .content-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      letter-spacing: -0.01em;
+    }
+
+    .content-sub {
+      font-size: 0.78rem;
+      color: var(--gray-400);
+      margin-top: 2px;
+    }
+
+    .add-btn {
+      background: var(--gray-900);
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.4rem 0.85rem;
+      border-radius: 5px;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+    }
+
     .stat-card {
-      flex: 1; background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 10px; padding: 1rem 1.2rem;
+      background: var(--white);
+      border: 1px solid var(--gray-100);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
     }
-    .stat-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
-    .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
-    .stat-value.green { color: var(--success); }
-    .stat-value.purple { color: var(--accent2); }
-    .table-preview {
-      background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 10px; overflow: hidden;
+
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--gray-400);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
     }
+
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    .stat-delta {
+      font-size: 0.72rem;
+      color: var(--gray-400);
+      margin-top: 0.25rem;
+    }
+
+    .data-table {
+      background: var(--white);
+      border: 1px solid var(--gray-100);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .table-head {
+      display: grid;
+      grid-template-columns: 2fr 1.5fr 0.6fr 0.8fr;
+      padding: 0.65rem 1rem;
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-100);
+    }
+
+    .th {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--gray-400);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
     .table-row {
-      display: flex; gap: 1rem; padding: 0.7rem 1rem;
-      font-size: 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: grid;
+      grid-template-columns: 2fr 1.5fr 0.6fr 0.8fr;
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--gray-50);
       align-items: center;
     }
-    .table-row.header { color: var(--muted); font-weight: 600; background: rgba(255,255,255,0.02); }
-    .badge {
-      padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+
+    .table-row:last-child {
+      border-bottom: none;
     }
-    .badge-green { background: rgba(52,211,153,0.15); color: var(--success); }
-    .badge-yellow { background: rgba(251,191,36,0.15); color: #fbbf24; }
-    .badge-blue { background: rgba(56,189,248,0.15); color: var(--accent); }
+
+    .td {
+      font-size: 0.8rem;
+      color: var(--gray-700);
+    }
+
+    .td.name {
+      font-weight: 500;
+      color: var(--gray-900);
+    }
+
+    .status-pill {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 500;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+    }
+
+    .pill-active {
+      background: #f0fdf4;
+      color: #15803d;
+    }
+
+    .pill-pending {
+      background: #fefce8;
+      color: #a16207;
+    }
+
+    .pill-recorded {
+      background: var(--gray-100);
+      color: var(--gray-600);
+    }
+
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--gray-100);
+      margin: 0;
+    }
 
     /* ── Features ── */
-    .section { padding: 6rem 2rem; }
-    .section-inner { max-width: 1100px; margin: 0 auto; }
-    .section-tag {
-      display: inline-block; font-size: 0.75rem; font-weight: 700;
-      letter-spacing: 0.1em; text-transform: uppercase;
-      color: var(--accent); margin-bottom: 0.8rem;
+    .section {
+      padding: 6rem 2rem;
     }
-    .section-title {
-      font-size: clamp(2rem, 4vw, 3rem); font-weight: 800;
-      letter-spacing: -0.02em; margin-bottom: 1rem;
-    }
-    .section-sub { font-size: 1.1rem; color: var(--muted); max-width: 550px; margin-bottom: 3.5rem; }
-    .features-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;
-    }
-    .feature-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: 16px; padding: 1.8rem;
-      transition: border-color 0.3s, transform 0.3s;
-      backdrop-filter: blur(8px);
-    }
-    .feature-card:hover { border-color: rgba(56,189,248,0.4); transform: translateY(-4px); }
-    .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
-    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
-    .feature-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.7; }
 
-    /* ── Install steps ── */
-    .steps-grid { display: flex; flex-direction: column; gap: 1.5rem; max-width: 680px; }
+    .section-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+      font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--gray-900);
+      line-height: 1.2;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-desc {
+      font-size: 1rem;
+      color: var(--gray-500);
+      max-width: 480px;
+      line-height: 1.7;
+      margin-bottom: 3.5rem;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--gray-200);
+    }
+
+    .feature-card {
+      background: var(--white);
+      padding: 2rem;
+      transition: background 0.15s;
+    }
+
+    .feature-card:hover {
+      background: var(--gray-50);
+    }
+
+    .feature-icon-wrap {
+      width: 36px;
+      height: 36px;
+      background: var(--gray-100);
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feature-icon-wrap svg {
+      width: 16px;
+      height: 16px;
+      fill: var(--gray-600);
+    }
+
+    .feature-card h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.01em;
+    }
+
+    .feature-card p {
+      font-size: 0.875rem;
+      color: var(--gray-500);
+      line-height: 1.65;
+    }
+
+    /* ── Steps ── */
+    .steps-section {
+      padding: 6rem 2rem;
+      background: var(--gray-50);
+      border-top: 1px solid var(--gray-200);
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .steps-layout {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5rem;
+      align-items: start;
+    }
+
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
     .step {
-      display: flex; gap: 1.5rem; align-items: flex-start;
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: 14px; padding: 1.5rem;
+      display: flex;
+      gap: 1.25rem;
+      padding: 1.5rem 0;
+      border-bottom: 1px solid var(--gray-200);
     }
+
+    .step:first-child {
+      padding-top: 0;
+    }
+
+    .step:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
     .step-num {
-      min-width: 44px; height: 44px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--accent), #0ea5e9);
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 1rem; color: #0b1120;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--gray-300);
+      letter-spacing: 0.05em;
+      min-width: 24px;
+      padding-top: 0.1rem;
     }
-    .step h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; }
-    .step p { font-size: 0.88rem; color: var(--muted); }
+
+    .step h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.01em;
+    }
+
+    .step p {
+      font-size: 0.875rem;
+      color: var(--gray-500);
+      line-height: 1.65;
+    }
+
+    .step code {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.78rem;
+      background: var(--gray-200);
+      color: var(--gray-700);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+
+    .spec-box {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .spec-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--gray-100);
+    }
+
+    .spec-header h4 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 0.25rem;
+    }
+
+    .spec-header p {
+      font-size: 0.8rem;
+      color: var(--gray-400);
+    }
+
+    .spec-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.85rem 1.5rem;
+      border-bottom: 1px solid var(--gray-50);
+    }
+
+    .spec-row:last-child {
+      border-bottom: none;
+    }
+
+    .spec-key {
+      font-size: 0.8rem;
+      color: var(--gray-500);
+    }
+
+    .spec-val {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--gray-800);
+    }
 
     /* ── Download CTA ── */
-    .cta {
-      padding: 6rem 2rem; text-align: center;
-      background: linear-gradient(180deg, var(--bg) 0%, var(--bg3) 50%, var(--bg) 100%);
+    .cta-section {
+      padding: 7rem 2rem;
+      text-align: center;
     }
-    .cta h2 { font-size: clamp(2rem, 4vw, 3rem); font-weight: 900; margin-bottom: 1rem; }
-    .cta p { font-size: 1.1rem; color: var(--muted); margin-bottom: 2rem; }
-    .release-info {
-      display: inline-flex; align-items: center; gap: 0.8rem;
-      background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3);
-      padding: 0.5rem 1.2rem; border-radius: 999px;
-      font-size: 0.85rem; color: var(--success); font-weight: 600;
+
+    .cta-inner {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--gray-500);
+      background: var(--gray-100);
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 1.75rem;
+    }
+
+    .version-dot {
+      width: 6px;
+      height: 6px;
+      background: #22c55e;
+      border-radius: 50%;
+    }
+
+    .cta-section h2 {
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--gray-900);
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+
+    .cta-section p {
+      font-size: 1rem;
+      color: var(--gray-500);
       margin-bottom: 2rem;
+      line-height: 1.7;
     }
-    .download-options { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+
+    .download-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--gray-900);
+      color: var(--white);
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.8rem 1.75rem;
+      border-radius: var(--radius);
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+
+    .btn-download:hover {
+      background: var(--gray-700);
+    }
+
+    .btn-download svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .btn-alt {
+      font-size: 0.83rem;
+      color: var(--gray-400);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .btn-alt:hover {
+      color: var(--gray-700);
+    }
+
+    .cta-note {
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      color: var(--gray-300);
+    }
+
+    .cta-note a {
+      color: var(--gray-400);
+      text-decoration: none;
+    }
+
+    .cta-note a:hover {
+      color: var(--gray-600);
+      text-decoration: underline;
+    }
 
     /* ── Footer ── */
     footer {
-      padding: 2.5rem 2rem; border-top: 1px solid var(--border);
-      display: flex; flex-wrap: wrap; gap: 1rem;
-      align-items: center; justify-content: space-between;
-      max-width: 1100px; margin: 0 auto;
+      border-top: 1px solid var(--gray-200);
+      padding: 2rem;
     }
-    footer p { font-size: 0.85rem; color: var(--muted); }
-    footer a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
-    footer a:hover { color: var(--text); }
-    .footer-links { display: flex; gap: 1.5rem; }
 
-    /* ── Animations ── */
-    @keyframes fadeDown {
-      from { opacity: 0; transform: translateY(-16px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .footer-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.6; }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
     }
-    .live-dot {
-      width: 8px; height: 8px; background: var(--success); border-radius: 50%;
-      animation: pulse 1.5s ease infinite;
+
+    .footer-copy {
+      font-size: 0.8rem;
+      color: var(--gray-400);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.25rem;
+    }
+
+    .footer-links a {
+      font-size: 0.8rem;
+      color: var(--gray-400);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .footer-links a:hover {
+      color: var(--gray-700);
+    }
+
+    /* ── Fade-in animation (minimal) ── */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.5s ease forwards;
+    }
+
+    .fade-in:nth-child(1) { animation-delay: 0s; }
+    .fade-in:nth-child(2) { animation-delay: 0.08s; }
+    .fade-in:nth-child(3) { animation-delay: 0.16s; }
+    .fade-in:nth-child(4) { animation-delay: 0.24s; }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* ── Responsive ── */
-    @media (max-width: 680px) {
-      .nav-links { display: none; }
-      .app-preview { grid-template-columns: 1fr; }
-      .sidebar-preview { display: none; }
+    @media (max-width: 700px) {
+      nav { padding: 0 1.25rem; }
+      .nav-right { gap: 1rem; }
+      .nav-link { display: none; }
+
+      .hero { padding: 110px 1.25rem 70px; }
+
+      .preview-section { padding: 0 1.25rem 4rem; }
+      .browser-body { grid-template-columns: 1fr; }
+      .app-sidebar { display: none; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+
+      .section { padding: 4rem 1.25rem; }
+      .steps-layout { grid-template-columns: 1fr; gap: 3rem; }
+      .steps-section { padding: 4rem 1.25rem; }
+      .cta-section { padding: 5rem 1.25rem; }
+
+      .footer-inner { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
@@ -285,190 +916,244 @@
 <!-- Navigation -->
 <nav>
   <a href="#" class="nav-logo">
-    <span>🌴</span>
-    <strong>Chuti</strong>
+    <div class="logo-mark">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="5" height="5" rx="1"/>
+        <rect x="9" y="2" width="5" height="5" rx="1"/>
+        <rect x="2" y="9" width="5" height="5" rx="1"/>
+        <rect x="9" y="9" width="5" height="5" rx="1"/>
+      </svg>
+    </div>
+    <span class="logo-text">Chuti</span>
   </a>
-  <div class="nav-links">
-    <a href="#features">Features</a>
-    <a href="#install">Install</a>
-    <a href="#download">Download</a>
-    <a href="https://github.com/zihadmahiuddin/Chuti" target="_blank" rel="noopener">GitHub</a>
+  <div class="nav-right">
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#download" class="nav-link">Download</a>
+    <a href="https://github.com/zihaaaad/Chuti" target="_blank" rel="noopener" class="nav-btn">GitHub</a>
   </div>
 </nav>
 
 <!-- Hero -->
 <section class="hero">
-  <div class="hero-badge">
-    <div class="live-dot"></div>
-    Version 1.0.0 — Free &amp; Open Source
+  <div class="fade-in">
+    <div class="hero-label">
+      <div class="hero-label-dot"></div>
+      Version 1.0.0 — Windows 64-bit
+    </div>
   </div>
-  <h1>Leave Management,<br><span class="highlight">Without the Cloud</span></h1>
-  <p>Chuti is a fully offline, self-hosted leave management system for small teams. Install it once, own your data forever. No subscription, no internet required.</p>
-  <div class="hero-actions">
-    <a href="https://github.com/zihadmahiuddin/Chuti/releases/latest/download/Chuti-Setup.exe" id="hero-download-btn" class="btn-primary">
-      ⬇ Download for Windows
+  <h1 class="fade-in">Leave management,<br><span>done simply.</span></h1>
+  <p class="fade-in">Chuti is a lightweight, offline-first leave management system built for small teams. Install once, own your data forever. No cloud, no recurring fees.</p>
+  <div class="hero-actions fade-in">
+    <a href="https://github.com/zihaaaad/Chuti/releases/latest/download/Chuti-Setup.exe" id="hero-download-btn" class="btn-primary">
+      <svg viewBox="0 0 16 16"><path d="M8 12l-4.5-4.5 1.06-1.06L7 8.88V2h2v6.88l2.44-2.44L12.5 7.5 8 12zM2 14h12v-2H2v2z"/></svg>
+      Download for Windows
     </a>
-    <a href="https://github.com/zihadmahiuddin/Chuti" id="view-source-btn" class="btn-secondary" target="_blank" rel="noopener">
-      ☆ View on GitHub
+    <a href="https://github.com/zihaaaad/Chuti" id="view-source-btn" class="btn-secondary" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      View source
     </a>
   </div>
   <div class="hero-meta">
-    <span>✅ Windows 10 / 11</span>
-    <span>🔒 100% Offline</span>
-    <span>⚡ LAN Sharing Built-in</span>
-    <span>🆓 Completely Free</span>
+    <span class="hero-meta-item">
+      <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 13A6 6 0 118 2a6 6 0 010 12zm0-9a1 1 0 00-1 1v4a1 1 0 002 0V6a1 1 0 00-1-1zm0-1.5a1 1 0 110-2 1 1 0 010 2z"/></svg>
+      Windows 10 / 11
+    </span>
+    <span class="hero-meta-item">
+      <svg viewBox="0 0 16 16"><path d="M8 1l.948 1.925L11 3.35l-1.5 1.463.354 2.062L8 5.825l-1.854.975.354-2.062L5 3.35l2.052-.425L8 1zm0 8a4 4 0 100 8 4 4 0 000-8zm0 1.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z"/></svg>
+      Fully offline
+    </span>
+    <span class="hero-meta-item">
+      <svg viewBox="0 0 16 16"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm1 1v7a1 1 0 001 1h12a1 1 0 001-1V5H1zm5 6H3v-1h3v1zm7 0H8v-1h5v1z"/></svg>
+      LAN sharing built-in
+    </span>
+    <span class="hero-meta-item">
+      <svg viewBox="0 0 16 16"><path d="M5 3a1 1 0 000 2h6a1 1 0 000-2H5zm-2 4a1 1 0 011-1h8a1 1 0 010 2H4a1 1 0 01-1-1zm1 3a1 1 0 000 2h4a1 1 0 000-2H4z"/></svg>
+      Free forever
+    </span>
   </div>
 </section>
 
-<!-- App Screenshot Preview -->
-<section class="screenshot-section">
-  <div class="screenshot-frame">
-    <div class="window-bar">
-      <div class="dot dot-r"></div>
-      <div class="dot dot-y"></div>
-      <div class="dot dot-g"></div>
-      <div class="window-title">Chuti — Leave Management · Network: http://192.168.1.15:3000</div>
-    </div>
-    <div class="app-preview">
-      <div class="sidebar-preview">
-        <div class="sidebar-item active">📊 Dashboard</div>
-        <div class="sidebar-item">👥 Employees</div>
-        <div class="sidebar-item">📋 Leave Records</div>
-        <div class="sidebar-item">🗓 Holidays</div>
-        <div class="sidebar-item">⚙ Settings</div>
+<!-- App Preview -->
+<section class="preview-section">
+  <div class="preview-inner">
+    <div class="browser-frame">
+      <div class="browser-bar">
+        <div class="browser-dots">
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+          <div class="browser-dot"></div>
+        </div>
+        <div class="browser-address">http://192.168.1.15:3000</div>
       </div>
-      <div class="content-preview">
-        <div class="stat-row">
-          <div class="stat-card">
-            <div class="stat-label">Total Employees</div>
-            <div class="stat-value">24</div>
+      <div class="browser-body">
+        <div class="app-sidebar">
+          <div class="sidebar-section">Main</div>
+          <div class="sidebar-item active">
+            <div class="sidebar-icon"></div> Dashboard
           </div>
-          <div class="stat-card">
-            <div class="stat-label">On Leave Today</div>
-            <div class="stat-value green">3</div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div> Employees
           </div>
-          <div class="stat-card">
-            <div class="stat-label">Leaves This Month</div>
-            <div class="stat-value purple">18</div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div> Leave Records
+          </div>
+          <div class="sidebar-section">Config</div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div> Holidays
+          </div>
+          <div class="sidebar-item">
+            <div class="sidebar-icon"></div> Settings
           </div>
         </div>
-        <div class="table-preview">
-          <div class="table-row header">
-            <span style="flex:2">Employee</span>
-            <span style="flex:1.5">Leave Type</span>
-            <span style="flex:1">Days</span>
-            <span style="flex:1">Status</span>
+        <div class="app-content">
+          <div class="content-header">
+            <div>
+              <div class="content-title">Dashboard</div>
+              <div class="content-sub">June 2025 · 24 employees</div>
+            </div>
+            <div class="add-btn">+ Add Leave</div>
           </div>
-          <div class="table-row">
-            <span style="flex:2">Rahim Ahmed</span>
-            <span style="flex:1.5">Annual Leave</span>
-            <span style="flex:1">3</span>
-            <span style="flex:1"><span class="badge badge-green">Active</span></span>
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-label">On Leave Today</div>
+              <div class="stat-value">3</div>
+              <div class="stat-delta">of 24 employees</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Leaves This Month</div>
+              <div class="stat-value">18</div>
+              <div class="stat-delta">+4 from last month</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Pending Balances</div>
+              <div class="stat-value">6</div>
+              <div class="stat-delta">employees with low CL</div>
+            </div>
           </div>
-          <div class="table-row">
-            <span style="flex:2">Karim Hossain</span>
-            <span style="flex:1.5">Sick Leave</span>
-            <span style="flex:1">1</span>
-            <span style="flex:1"><span class="badge badge-yellow">Half Day</span></span>
-          </div>
-          <div class="table-row">
-            <span style="flex:2">Fatema Begum</span>
-            <span style="flex:1.5">Casual Leave</span>
-            <span style="flex:1">2</span>
-            <span style="flex:1"><span class="badge badge-blue">Recorded</span></span>
+          <div class="data-table">
+            <div class="table-head">
+              <div class="th">Employee</div>
+              <div class="th">Leave Type</div>
+              <div class="th">Days</div>
+              <div class="th">Status</div>
+            </div>
+            <div class="table-row">
+              <div class="td name">Rahim Ahmed</div>
+              <div class="td">Annual Leave</div>
+              <div class="td">3</div>
+              <div class="td"><span class="status-pill pill-active">Active</span></div>
+            </div>
+            <div class="table-row">
+              <div class="td name">Karim Hossain</div>
+              <div class="td">Sick Leave</div>
+              <div class="td">0.5</div>
+              <div class="td"><span class="status-pill pill-pending">Half Day</span></div>
+            </div>
+            <div class="table-row">
+              <div class="td name">Fatema Begum</div>
+              <div class="td">Casual Leave</div>
+              <div class="td">2</div>
+              <div class="td"><span class="status-pill pill-recorded">Recorded</span></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 </section>
+
+<hr class="divider" />
 
 <!-- Features -->
 <section class="section" id="features">
   <div class="section-inner">
-    <span class="section-tag">Why Chuti?</span>
+    <div class="section-label">Features</div>
     <h2 class="section-title">Everything you need,<br>nothing you don't</h2>
-    <p class="section-sub">Built specifically for small organisations that need a reliable, no-fuss leave tracking system without ongoing cloud costs.</p>
+    <p class="section-desc">Built for small organisations that need a reliable system without ongoing complexity or cost.</p>
     <div class="features-grid">
       <div class="feature-card">
-        <div class="feature-icon">🔒</div>
+        <div class="feature-icon-wrap">
+          <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-1 4h2v5H7V5zm0 6h2v1.5H7V11z"/></svg>
+        </div>
         <h3>Fully Offline</h3>
-        <p>Your data never leaves your building. All records are stored in a local SQLite database that you fully control.</p>
+        <p>Your data never leaves your building. All records are stored in a local SQLite database that you fully control and can back up at any time.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📡</div>
+        <div class="feature-icon-wrap">
+          <svg viewBox="0 0 16 16"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm14 0H2v1h12V4zM2 7v5h5V7H2zm7 0v5h5V7H9z"/></svg>
+        </div>
         <h3>LAN Sharing</h3>
-        <p>Install on one PC and every colleague on the same Wi-Fi can access it from their browser. No extra setup required.</p>
+        <p>Install on one machine and every colleague on the same Wi-Fi can access it from their browser — no additional setup required.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📂</div>
+        <div class="feature-icon-wrap">
+          <svg viewBox="0 0 16 16"><path d="M1 3.5A1.5 1.5 0 012.5 2h11A1.5 1.5 0 0115 3.5v9a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9zM2.5 3a.5.5 0 00-.5.5V5h12V3.5a.5.5 0 00-.5-.5h-11zM2 6v6.5a.5.5 0 00.5.5h11a.5.5 0 00.5-.5V6H2z"/></svg>
+        </div>
         <h3>Choose Your Data Folder</h3>
-        <p>Pick exactly where your database, backups, and uploaded documents are saved. Full control, no surprises.</p>
+        <p>On first launch, pick exactly where your database, backups, and uploaded files are saved. Full control, no surprises, no hidden locations.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">🔄</div>
+        <div class="feature-icon-wrap">
+          <svg viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 01.5.5v2.1a1 1 0 001 1h12a1 1 0 001-1v-2.1a.5.5 0 011 0v2.1a2 2 0 01-2 2H2a2 2 0 01-2-2V10.4a.5.5 0 01.5-.5zm8.354-6.354a.5.5 0 00-.708 0L6.5 4.793 5.354 3.646a.5.5 0 10-.708.708l1.5 1.5a.5.5 0 00.708 0l2-2a.5.5 0 000-.708zM8 1a7 7 0 100 14A7 7 0 008 1z"/></svg>
+        </div>
         <h3>Auto Daily Backups</h3>
-        <p>The database is automatically backed up every time the application starts. Up to 30 rolling backups are kept.</p>
+        <p>The database is backed up automatically every time the application starts. Up to 30 rolling backups are kept so you can always restore.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📊</div>
+        <div class="feature-icon-wrap">
+          <svg viewBox="0 0 16 16"><path d="M4 1h8a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V3a2 2 0 012-2zm0 1a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V3a1 1 0 00-1-1H4zm1 3h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z"/></svg>
+        </div>
         <h3>Leave Analytics</h3>
-        <p>Real-time dashboard with leave balance tracking, late deductions, sandwich rule enforcement, and holiday management.</p>
+        <p>Real-time dashboard with leave balance tracking, late deductions, sandwich rule enforcement, holiday management, and summary reports.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📎</div>
+        <div class="feature-icon-wrap">
+          <svg viewBox="0 0 16 16"><path d="M4 0h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2a2 2 0 012-2zm0 1a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V2a1 1 0 00-1-1H4zm3 10a1 1 0 100 2 1 1 0 000-2zm3 0a1 1 0 100 2 1 1 0 000-2zm-6 0a1 1 0 100 2 1 1 0 000-2zm6-4a1 1 0 100 2 1 1 0 000-2zm-3 0a1 1 0 100 2 1 1 0 000-2zm-3 0a1 1 0 100 2 1 1 0 000-2zm6-4a1 1 0 100 2 1 1 0 000-2zm-3 0a1 1 0 100 2 1 1 0 000-2zm-3 0a1 1 0 100 2 1 1 0 000-2z"/></svg>
+        </div>
         <h3>Document Attachments</h3>
-        <p>Attach medical certificates and other files to leave records. All uploads are stored in your chosen data folder.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🖱</div>
-        <h3>One-Click Install</h3>
-        <p>Download the installer, run it, choose a data folder on first launch — and you're ready. No command line, no Node.js needed.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🆓</div>
-        <h3>Free Forever</h3>
-        <p>Open-source, MIT licensed. No trial periods, no seat limits, no hidden costs. Fork it, modify it, make it yours.</p>
+        <p>Attach medical certificates and supporting documents to leave records. All uploads are stored safely in your chosen data folder.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Installation Steps -->
-<section class="section" id="install" style="background: var(--bg2);">
-  <div class="section-inner" style="display:grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start;">
+<hr class="divider" />
+
+<!-- Steps -->
+<section class="steps-section" id="install">
+  <div class="steps-layout">
     <div>
-      <span class="section-tag">Get Started</span>
-      <h2 class="section-title">Up and running<br>in 60 seconds</h2>
-      <p class="section-sub">No developer experience required. If you can install any Windows program, you can install Chuti.</p>
+      <div class="section-label">Setup</div>
+      <h2 class="section-title">Running in<br>under a minute</h2>
+      <p class="section-desc">No developer experience required. If you can install any Windows program, you can install Chuti.</p>
     </div>
-    <div class="steps-grid">
+    <div class="steps-list">
       <div class="step">
-        <div class="step-num">1</div>
+        <div class="step-num">01</div>
         <div>
           <h3>Download the installer</h3>
-          <p>Click the Download button and save <code>Chuti-Setup.exe</code> to your computer.</p>
+          <p>Click the download button below and save <code>Chuti-Setup.exe</code> to your computer.</p>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">2</div>
+        <div class="step-num">02</div>
         <div>
-          <h3>Run Chuti Setup.exe</h3>
-          <p>Double-click the installer. Windows may show a SmartScreen prompt — click "More info → Run anyway" (the app is unsigned but safe).</p>
+          <h3>Run the setup</h3>
+          <p>Double-click the installer. Windows SmartScreen may appear — click "More info" then "Run anyway." The app is safe and open-source.</p>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">3</div>
+        <div class="step-num">03</div>
         <div>
-          <h3>Choose your data folder</h3>
-          <p>On first launch, a dialog will ask you to choose a folder for your database and files. Pick any folder you like (e.g. Documents\ChutiData).</p>
+          <h3>Choose a data folder</h3>
+          <p>On first launch, a dialog asks you to choose a folder for your database and files. Pick anywhere — for example <code>Documents\ChutiData</code>.</p>
         </div>
       </div>
       <div class="step">
-        <div class="step-num">4</div>
+        <div class="step-num">04</div>
         <div>
-          <h3>Share the LAN URL with your team</h3>
-          <p>A popup will show the Network URL (e.g. <code>http://192.168.1.x:3000</code>). Share this with colleagues on the same Wi-Fi.</p>
+          <h3>Share the network URL</h3>
+          <p>A popup shows your network address (e.g. <code>http://192.168.1.x:3000</code>). Share it with colleagues on the same Wi-Fi so they can log in from their browsers.</p>
         </div>
       </div>
     </div>
@@ -476,34 +1161,52 @@
 </section>
 
 <!-- Download CTA -->
-<section class="cta" id="download">
-  <div class="release-info">
-    <div class="live-dot"></div>
-    Latest Release: v1.0.0
+<section class="cta-section" id="download">
+  <div class="cta-inner">
+    <div class="version-badge">
+      <div class="version-dot"></div>
+      Latest — v1.0.0
+    </div>
+    <h2>Ready to get started?</h2>
+    <p>Download Chuti for Windows. Free, forever. No account required.</p>
+    <div class="download-row">
+      <a href="https://github.com/zihaaaad/Chuti/releases/latest/download/Chuti-Setup.exe" id="cta-download-btn" class="btn-download">
+        <svg viewBox="0 0 16 16"><path d="M8 12l-4.5-4.5 1.06-1.06L7 8.88V2h2v6.88l2.44-2.44L12.5 7.5 8 12zM2 14h12v-2H2v2z"/></svg>
+        Download Installer — Windows x64
+      </a>
+      <a href="https://github.com/zihaaaad/Chuti/releases/latest/download/Chuti-Portable.exe" id="cta-portable-btn" class="btn-alt">
+        Or download the portable version
+      </a>
+    </div>
+    <p class="cta-note">
+      Windows 10 / 11 · 64-bit · No internet required after install ·
+      <a href="https://github.com/zihaaaad/Chuti/releases" target="_blank" rel="noopener">View all releases</a>
+    </p>
   </div>
-  <h2>Ready to get started?</h2>
-  <p>Download Chuti for Windows — free, forever.</p>
-  <div class="download-options">
-    <a href="https://github.com/zihadmahiuddin/Chuti/releases/latest/download/Chuti-Setup.exe" id="cta-download-btn" class="btn-primary">
-      ⬇ &nbsp;Download Installer (.exe) &nbsp;~130 MB
-    </a>
-    <a href="https://github.com/zihadmahiuddin/Chuti/releases/latest/download/Chuti-Portable.exe" id="cta-portable-btn" class="btn-secondary">
-      📦 &nbsp;Portable Version
-    </a>
-  </div>
-  <p style="margin-top:1.5rem; font-size:0.82rem; color:var(--muted);">
-    Windows 10 / 11 · 64-bit · No admin rights required (per-user install)
-    · <a href="https://github.com/zihadmahiuddin/Chuti/releases" style="color:var(--accent); text-decoration:none;">All releases →</a>
-  </p>
 </section>
 
 <!-- Footer -->
 <footer>
-  <p>© 2025 Chuti. MIT License. Made with ❤ for small teams.</p>
-  <div class="footer-links">
-    <a href="https://github.com/zihadmahiuddin/Chuti" target="_blank" rel="noopener">GitHub</a>
-    <a href="https://github.com/zihadmahiuddin/Chuti/issues" target="_blank" rel="noopener">Report a Bug</a>
-    <a href="https://github.com/zihadmahiuddin/Chuti/releases" target="_blank" rel="noopener">All Releases</a>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <a href="#" class="nav-logo" style="gap:0.4rem">
+        <div class="logo-mark">
+          <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="2" width="5" height="5" rx="1"/>
+            <rect x="9" y="2" width="5" height="5" rx="1"/>
+            <rect x="2" y="9" width="5" height="5" rx="1"/>
+            <rect x="9" y="9" width="5" height="5" rx="1"/>
+          </svg>
+        </div>
+        <span class="logo-text" style="font-size:0.875rem">Chuti</span>
+      </a>
+      <span class="footer-copy">MIT License · Free to use and modify</span>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/zihaaaad/Chuti" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/zihaaaad/Chuti/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/zihaaaad/Chuti/issues" target="_blank" rel="noopener">Report a bug</a>
+    </div>
   </div>
 </footer>
 

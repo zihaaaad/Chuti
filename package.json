@@ -16,8 +16,9 @@
     "start-lan": "next start -H 0.0.0.0",
     "lint": "eslint",
     "electron-dev": "electron .",
-    "build-exe": "npm run build && electron-builder --win --x64",
-    "build-exe-publish": "npm run build && electron-builder --win --x64 --publish always"
+    "generate-ico": "node scripts/generate-ico.js",
+    "build-exe": "npm run generate-ico && npm run build && electron-builder --win --x64",
+    "build-exe-publish": "npm run generate-ico && npm run build && electron-builder --win --x64 --publish always"
   },
   "build": {
     "appId": "app.chuti.leave-management",
@@ -67,9 +68,9 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "public/icon.png",
-      "uninstallerIcon": "public/icon.png",
-      "installerHeaderIcon": "public/icon.png",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Chuti",
