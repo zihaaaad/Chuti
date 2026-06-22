@@ -71,7 +71,7 @@ jobs:
           if ($setup) {
             # Copy to generic name so landing page latest links don't break
             Copy-Item $setup.FullName "dist\Chuti-Setup.exe"
-            Rename-Item $setup.FullName "dist\Chuti-Setup-$ver.exe"
+            Rename-Item $setup.FullName "Chuti-Setup-$ver.exe"
             echo "Prepared assets: Chuti-Setup.exe and Chuti-Setup-$ver.exe"
           }
           
@@ -80,7 +80,7 @@ jobs:
           if ($portable) {
             # Copy to generic name so landing page latest links don't break
             Copy-Item $portable.FullName "dist\Chuti-Portable.exe"
-            Rename-Item $portable.FullName "dist\Chuti-Portable-$ver.exe"
+            Rename-Item $portable.FullName "Chuti-Portable-$ver.exe"
             echo "Prepared assets: Chuti-Portable.exe and Chuti-Portable-$ver.exe"
           }
 
