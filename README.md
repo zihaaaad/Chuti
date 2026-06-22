@@ -1,109 +1,99 @@
-# Chuti - Leave Management System
+# 💻 Chuti — Leave Management System
 
-Chuti is a lightweight, offline-first, local Leave Management System designed specifically for the operational needs of companies, schools, colleges, and training institutes. 
+[![Build & Release Status](https://github.com/zihaaaad/Chuti/actions/workflows/build-release.yml/badge.svg)](https://github.com/zihaaaad/Chuti/actions/workflows/build-release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/zihaaaad/Chuti?color=blue)](https://github.com/zihaaaad/Chuti/releases/latest)
+[![License](https://img.shields.io/github/license/zihaaaad/Chuti?color=green)](LICENSE)
+[![Platform Support](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-orange)](#)
+[![Offline Status](https://img.shields.io/badge/Offline-100%25%20Local-success)](#)
 
-The system runs locally on a single host computer (such as at the administrator or HR desk), stores all records securely in a local database, and allows other computers on the same local network (Wi-Fi or LAN) to access the portal without requiring external cloud hosting or internet access.
-
----
-
-## Key Features
-
-- **Single-Administrator Console**: No employee login accounts are required. A single administrator manages all employee profiles, records leave applications, and configures policy rules from one secure interface.
-- **Preconfigured Leave Quotas**: Built-in support for Casual Leave (CL - 10 days), Sick Leave (SL - 14 days), Earned Leave (EL - 15 days), and Maternity Leave (ML).
-- **Sandwich Rule Toggle**: Enable or disable the sandwich rule according to company policy. When enabled, weekends and holidays falling within a leave range are counted as leave days.
-- **Late Attendance Deductions**: Automatically calculates and deducts Casual Leave (CL) days based on monthly late attendance counts (for example, deducting 1 CL day for every 3 late attendances).
-- **Leave Encashment & Unpaid Leave (LWP)**: Log Earned Leave encashment details and track Leave Without Pay (LWP) days, which automatically deduct from net paid days in payroll summaries.
-- **Local Document Previews and Uploads**: Scan and upload leave applications, medical documents, or certificates directly to local storage. View photos and PDFs inline inside the application using a built-in preview modal.
-- **A4 Landscape Reports and CSV Exports**:
-  - **Leave Ledger Log**: A detailed log of historical leave applications.
-  - **Payroll Attendance Summary**: A monthly collated summary calculating total leaves, late counts, deducted CL, and net paid days.
-  - **A4 Landscape PDF Printing**: Styled with print-specific media queries to hide sidebars, filter tools, and buttons, formatting the tables for A4 landscape paper.
-  - **CSV Spreadsheet Exports**: Download reports in CSV format for importing into Excel or accounting software.
-- **Data Integrity and Auto-Backups**: The SQLite database runs in Write-Ahead Logging (WAL) mode to protect data from corruption during sudden power failures. The launcher script automatically creates a dated backup inside the backups directory every time it starts up.
+**Chuti** (ছুটি) is a lightweight, offline-first, local Leave Management System designed specifically for the operational needs of companies, schools, colleges, and training institutes. It provides a simple, unified interface for administrators to manage employee directories, record leave history, adjust balances, and compile payroll summary reports without requiring cloud hosting, external database servers, or an active internet connection.
 
 ---
 
-## System Requirements
+## 🌟 Key Features
 
-The host computer must have Node.js installed to run the application server:
-- Node.js (Version 18 or higher is recommended)
-- Available download: https://nodejs.org
-
----
-
-## Installation and Startup on Windows
-
-1. Download and extract this project folder to your desired directory (for example, Desktop or Documents).
-2. Double-click the launcher script named `start.bat`.
-3. The launcher will run the following operations:
-   - Check if Node.js is installed on your system.
-   - Install all required software dependencies during the first-time startup.
-   - Prompt you to select a startup mode: Enter 1 for Production Mode (optimized, fast, and recommended) or 2 for Developer Mode.
-   - Automatically compile the application files and open your web browser to http://localhost:3000.
-4. Log in using the default administrator password:
-   ```
-   admin123
-   ```
-   Note: It is highly recommended to change this password immediately in the Settings panel.
+*   **🔒 Local & Secure:** All data stays within your building. Information is stored in a robust SQLite database on the host machine.
+*   **🖥️ Multi-Mode Launcher:**
+    *   **Desktop App:** Run as a standalone Windows application (`Chuti-Setup.exe` or `Chuti-Portable.exe`) with a clean user interface.
+    *   **LAN sharing:** Run on one main host computer and allow all colleagues on the same office Wi-Fi or LAN to access the portal from their web browsers.
+*   **👥 Single-Admin Console:** No complex employee login flows or accounts. A single administrator manages directories, records leaves, and manages settings from one interface.
+*   **📊 Preconfigured Leave Quotas:** Built-in tracking for Casual Leave (CL - 10 days), Sick Leave (SL - 14 days), Earned Leave (EL - 15 days), and Maternity Leave (ML).
+*   **⚙️ Smart Business Logic:**
+    *   **Sandwich Rule Toggle:** Automatically counts weekends and holidays falling within a leave range as taken leaves when enabled.
+    *   **Late Attendance Deductions:** Automatically calculates and deducts Casual Leave (CL) days based on monthly late count thresholds (e.g., 3 lates = 1 CL day deducted).
+    *   **Leave Encashment:** Easily log and deduct encashed Earned Leave days.
+*   **📎 Document Attachments:** Upload scans, medical certificates, or applications directly to local storage and preview them inside the app.
+*   **🖨️ A4 Landscape Reports:** Stylized, printer-friendly reports formatted for A4 landscape layouts (Leave Ledgers, Monthly Payroll Summaries, and Excel-compatible CSV exports).
+*   **🛡️ Power-Resistant Integrity:** Runs in Write-Ahead Logging (WAL) SQLite mode to prevent database corruption from sudden power cuts, and automatically schedules dated rolling backups.
 
 ---
 
-## Startup on Mac or Linux
+## 📥 Installation & Usage
 
-Open your Terminal in the project directory and execute the following commands:
+### Method A: Standalone Desktop App (Recommended)
+No technical knowledge or pre-installed software is required.
 
+1.  Go to the [Latest Releases](https://github.com/zihaaaad/Chuti/releases/latest) page.
+2.  Download **`Chuti-Setup.exe`** (Installer) or **`Chuti-Portable.exe`** (Run from folder).
+3.  Double-click the file to launch. (Windows SmartScreen may show a warning — click *More Info* -> *Run Anyway*).
+4.  On first launch, choose a folder (e.g., `Documents/ChutiData`) where the system will save the database, attachments, and backups.
+
+### Method B: Self-Hosted Server (Developers / Advanced)
+If you want to run Chuti directly from source code:
+
+#### Windows Launcher:
+1.  Ensure you have **Node.js v18+** installed.
+2.  Double-click **`start.bat`**.
+3.  The launcher script will install dependencies, prompt you to start, and launch the portal in your browser at `http://localhost:3000`.
+
+#### Mac / Linux manual startup:
 ```bash
 # 1. Install dependencies
-npm install
+npm install --legacy-peer-deps
 
-# 2. Compile application files for production
+# 2. Build Next.js application
 npm run build
 
-# 3. Start the server on the local network interface
+# 3. Start the LAN network server
 npm run start-lan
 ```
 
-Once started, open your web browser and go to: http://localhost:3000
+---
+
+## 🔑 Default Credentials
+
+Upon opening the login screen, enter the default admin password:
+```text
+admin123
+```
+> [!IMPORTANT]
+> For security reasons, please navigate to the **Settings** panel and change your password immediately after your first login.
 
 ---
 
-## Network Sharing (LAN Access)
+## 📶 Office LAN Sharing
 
-Since the server binds to all local network interfaces (0.0.0.0), other computers or mobile devices connected to the same office Wi-Fi or local network can access the portal.
-
-1. When you run `start.bat`, the console automatically detects and displays your local network IP address (for example, http://192.168.1.100:3000).
-2. Ensure that your host computer's Windows Defender Firewall allows incoming traffic on Port 3000.
-3. Open the web browser on any device connected to the same network and enter the displayed network URL.
-
----
-
-## Upgrades and Updates
-
-When updating the software or pulling new code changes from GitHub, your local data remains secure:
-
-1. Open Command Prompt in the project folder and pull the latest changes:
-   ```bash
-   git pull origin main
-   ```
-2. Run `start.bat` to rebuild the project.
-
-Note: The local database file (`database.db`), local backups (`/backups`), and uploaded attachments (`/public/uploads`) are specified inside the `.gitignore` file. Pulling updates from Git will safely update the application features without overwriting, modifying, or losing any of your employees, historical records, settings, or uploaded files. Database schema migrations run automatically on startup.
+Chuti is built to work as a shared portal on your local network:
+1.  Launch the application on the host machine.
+2.  Click the **Network URL** popup in the dashboard to see your LAN address (e.g., `http://192.168.1.100:3000`).
+3.  Share this link with your coworkers. Anyone connected to the same office Wi-Fi can open the link in their web browser to access the system.
+4.  *Note:* Ensure that your host machine's firewall permits incoming traffic on Port 3000.
 
 ---
 
-## PC Migration Guide
+## 💾 System Backups & Migration
 
-To move your entire leave management system, database history, and uploaded files to a new computer:
+### Automatic Backups
+Chuti automatically creates a timestamped database backup in your data folder's `backups/` directory on every startup, rotating and keeping the last 30 backups to save disk space.
 
-1. Locate the project folder (`LeaveManagementSystem`) on the current host computer.
-2. Compress the entire folder into a `.zip` archive file. Ensure that the local database file `database.db` and the `/public/uploads` directory are included in the archive.
-3. Transfer the `.zip` archive to the new computer using a USB drive, external hard drive, or local network transfer.
-4. Extract the `.zip` archive on the new computer.
-5. Install Node.js on the new computer from https://nodejs.org.
-6. Double-click the `start.bat` launcher on the new computer. The script will automatically install dependencies, initialize, and open the system with all your employee records, quotas, settings, and documents intact.
+### Migrating to a New PC
+Since the database file is completely self-contained, migrating to another computer is extremely simple:
+1.  Locate your chosen **Data Folder** (containing `database.db`, `uploads/`, and `backups/`).
+2.  Copy this folder to a USB drive and move it to the new computer.
+3.  Launch the Chuti app on the new computer and select the copied folder as your Data Folder. All employee records, settings, and documents will load instantly.
 
 ---
 
-## License
+## 📄 License
 
-This project is licensed under the terms of the MIT License. You are free to modify, distribute, and utilize it within your organization.
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details. Feel free to use, modify, and distribute it within your organization.
