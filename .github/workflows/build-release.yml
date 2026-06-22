@@ -60,22 +60,28 @@ jobs:
         shell: pwsh
         run: Get-ChildItem dist -Recurse -File | Select-Object FullName, Length
 
-      # ── 8. Rename artifacts to consistent names ───────────────────────────
-      - name: Rename artifacts
+      # ── 8. Rename and Copy artifacts for consistent download links ────────
+      - name: Rename and Copy artifacts
         shell: pwsh
         run: |
           $ver = "${{ steps.pkg.outputs.VERSION }}"
-          # Rename installer
+          
+          # Handle installer
           $setup = Get-ChildItem dist -Filter "*Setup*.exe" | Select-Object -First 1
           if ($setup) {
+            # Copy to generic name so landing page latest links don't break
+            Copy-Item $setup.FullName "dist\Chuti-Setup.exe"
             Rename-Item $setup.FullName "dist\Chuti-Setup-$ver.exe"
-            echo "Renamed: $($setup.Name) -> Chuti-Setup-$ver.exe"
+            echo "Prepared assets: Chuti-Setup.exe and Chuti-Setup-$ver.exe"
           }
-          # Rename portable
-          $portable = Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notlike "*Setup*" } | Select-Object -First 1
+          
+          # Handle portable (exclude the newly copied Chuti-Setup.exe)
+          $portable = Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notlike "*Setup*" -and $_.Name -notlike "Chuti-Setup.exe" } | Select-Object -First 1
           if ($portable) {
+            # Copy to generic name so landing page latest links don't break
+            Copy-Item $portable.FullName "dist\Chuti-Portable.exe"
             Rename-Item $portable.FullName "dist\Chuti-Portable-$ver.exe"
-            echo "Renamed: $($portable.Name) -> Chuti-Portable-$ver.exe"
+            echo "Prepared assets: Chuti-Portable.exe and Chuti-Portable-$ver.exe"
           }
 
       # ── 9. Upload as workflow artifacts (for manual download too) ─────────
@@ -84,7 +90,9 @@ jobs:
         with:
           name: chuti-windows-exe
           path: |
+            dist/Chuti-Setup.exe
             dist/Chuti-Setup-*.exe
+            dist/Chuti-Portable.exe
             dist/Chuti-Portable-*.exe
           if-no-files-found: warn
           retention-days: 30
@@ -122,7 +130,9 @@ jobs:
             ---
             *Built automatically from commit `${{ github.sha }}`*
           files: |
+            dist/Chuti-Setup.exe
             dist/Chuti-Setup-*.exe
+            dist/Chuti-Portable.exe
             dist/Chuti-Portable-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
