@@ -9,6 +9,7 @@ interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   isDanger?: boolean;
+  confirmInputText?: string;
 }
 
 interface ConfirmContextType {
@@ -51,6 +52,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         confirmText={options.confirmText}
         cancelText={options.cancelText}
         isDanger={options.isDanger}
+        confirmInputText={options.confirmInputText}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />

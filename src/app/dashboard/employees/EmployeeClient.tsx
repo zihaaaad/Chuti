@@ -199,8 +199,9 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
   const handleDelete = async (id: number, empName: string) => {
     const ok = await confirm({
       title: 'Delete Employee',
-      message: `Are you sure you want to delete ${empName}? This will permanently delete all their leave records.`,
+      message: `Are you sure you want to delete ${empName}? This will permanently delete all their leave records and cannot be undone.`,
       confirmText: 'Delete',
+      confirmInputText: empName,
       isDanger: true
     });
     if (ok) {

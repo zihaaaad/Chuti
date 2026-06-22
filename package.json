@@ -73,8 +73,7 @@
       "installerHeaderIcon": "public/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Chuti",
-      "include": "installer.nsh"
+      "shortcutName": "Chuti"
     },
     "publish": {
       "provider": "github",
@@ -96,7 +95,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sqlite3": "^3.1.11",
-    "electron": "^36.3.1",
+    "electron": "36.9.5",
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",

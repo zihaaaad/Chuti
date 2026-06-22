@@ -7,7 +7,8 @@ import RefreshButton from './RefreshButton';
 export default async function DashboardPage() {
   const db = await getDb();
   
-  const todayStr = new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const currentMonthStr = todayStr.substring(0, 7); // YYYY-MM
 
   // 1. Fetch Stats
@@ -221,7 +222,7 @@ export default async function DashboardPage() {
                           {record.start_date} to {record.end_date}
                         </td>
                         <td style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-                          {new Date(record.recorded_at).toLocaleDateString()}
+                          {new Date(record.recorded_at.replace(' ', 'T') + 'Z').toLocaleDateString()}
                         </td>
                       </tr>
                     ))}

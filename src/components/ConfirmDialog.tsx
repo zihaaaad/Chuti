@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
@@ -12,6 +12,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   isDanger?: boolean;
+  confirmInputText?: string;
 }
 
 export default function ConfirmDialog({
@@ -22,9 +23,20 @@ export default function ConfirmDialog({
   cancelText = 'Cancel',
   onConfirm,
   onCancel,
-  isDanger = false
+  isDanger = false,
+  confirmInputText
 }: ConfirmDialogProps) {
+  const [inputValue, setInputValue] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setInputValue('');
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const isConfirmDisabled = confirmInputText ? inputValue !== confirmInputText : false;
 
   return (
     <div style={{
@@ -76,9 +88,33 @@ export default function ConfirmDialog({
         </div>
 
         {/* Message */}
-        <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+        <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1.25rem', lineHeight: '1.5' }}>
           {message}
         </p>
+
+        {/* Optional Input Confirmation */}
+        {confirmInputText && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.5rem' }}>
+              Please type <strong style={{ color: 'var(--error)' }}>{confirmInputText}</strong> to confirm:
+            </p>
+            <input
+              type="text"
+              className="form-control"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder={confirmInputText}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.875rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border)',
+                outline: 'none'
+              }}
+            />
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
@@ -91,8 +127,13 @@ export default function ConfirmDialog({
           </button>
           <button 
             onClick={onConfirm}
+            disabled={isConfirmDisabled}
             className={isDanger ? 'btn btn-danger' : 'btn btn-primary'}
-            style={{ padding: '0.5rem 1rem' }}
+            style={{ 
+              padding: '0.5rem 1rem',
+              opacity: isConfirmDisabled ? 0.5 : 1,
+              cursor: isConfirmDisabled ? 'not-allowed' : 'pointer'
+            }}
           >
             {confirmText}
           </button>

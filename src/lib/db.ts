@@ -132,6 +132,7 @@ export async function getDb(): Promise<Database> {
       attachment_path TEXT,
       remarks TEXT,
       recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     );
 
@@ -154,6 +155,7 @@ export async function getDb(): Promise<Database> {
   try { await db.exec('ALTER TABLE employees ADD COLUMN phone TEXT;'); } catch (e) {}
   try { await db.exec('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active";'); } catch (e) {}
   try { await db.exec('ALTER TABLE leave_balances ADD COLUMN encashed_days REAL DEFAULT 0;'); } catch (e) {}
+  try { await db.exec('ALTER TABLE leave_records ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'); } catch (e) {}
 
   // Seed default settings if they do not exist
   const settingsCount = await db.get('SELECT COUNT(*) as count FROM system_settings');

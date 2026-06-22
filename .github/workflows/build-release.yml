@@ -30,7 +30,7 @@ jobs:
 
       # ── 3. Install dependencies ────────────────────────────────────────────
       - name: Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       # ── 4. Build Next.js standalone output ────────────────────────────────
       - name: Build Next.js (standalone)
@@ -53,7 +53,7 @@ jobs:
       - name: Build Electron Windows EXE
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --x64
+        run: npx electron-builder --win --x64 --publish never
 
       # ── 7. List produced artifacts ────────────────────────────────────────
       - name: List dist output
@@ -98,14 +98,15 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          fail_on_unmatched_files: false
           body: |
-            ## 🌴 Chuti Leave Management System — v${{ steps.pkg.outputs.VERSION }}
+            Chuti Leave Management System — v${{ steps.pkg.outputs.VERSION }}
 
             ### Download
             | File | Description |
             |------|-------------|
-            | **Chuti-Setup-${{ steps.pkg.outputs.VERSION }}.exe** | 🔧 Installer (recommended) — installs to your chosen folder with a desktop shortcut |
-            | **Chuti-Portable-${{ steps.pkg.outputs.VERSION }}.exe** | 📦 Portable — run from anywhere, no install needed |
+            | **Chuti-Setup-${{ steps.pkg.outputs.VERSION }}.exe** | Installer (recommended) — installs to your chosen folder with a desktop shortcut |
+            | **Chuti-Portable-${{ steps.pkg.outputs.VERSION }}.exe** | Portable — run from anywhere, no install needed |
 
             ### First Launch
             On first launch, Chuti will ask you to choose a **data folder** where your database, backups, and uploaded files will be stored. This folder is yours — Chuti never deletes it.

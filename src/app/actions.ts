@@ -3,13 +3,72 @@
 import fs from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { getDb } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
 // ----------------------------------------------------
-// HELPERS
+// HELPERS & SECURITY
 // ----------------------------------------------------
+
+// In-memory rate limiting map for login attempts
+const loginAttemptsMap = new Map<string, { count: number; lockedUntil: number }>();
+
+function checkRateLimit(ip: string): { allowed: boolean; waitTimeSeconds: number } {
+  const now = Date.now();
+  const record = loginAttemptsMap.get(ip);
+  if (record && record.lockedUntil > now) {
+    return { allowed: false, waitTimeSeconds: Math.ceil((record.lockedUntil - now) / 1000) };
+  }
+  return { allowed: true, waitTimeSeconds: 0 };
+}
+
+function recordLoginAttempt(ip: string, success: boolean) {
+  const now = Date.now();
+  const record = loginAttemptsMap.get(ip) || { count: 0, lockedUntil: 0 };
+  if (success) {
+    loginAttemptsMap.delete(ip);
+  } else {
+    record.count += 1;
+    if (record.count >= 10) {
+      record.lockedUntil = now + 5 * 60 * 1000; // 5 minute lock
+      record.count = 0; // Reset attempts after locking
+    }
+    loginAttemptsMap.set(ip, record);
+  }
+}
+
+// Input length validation helper
+function validateLength(val: any, max: number): boolean {
+  if (val && typeof val === 'string' && val.length > max) {
+    return false;
+  }
+  return true;
+}
+
+// Date validation helper (expects YYYY-MM-DD format and valid calendar date)
+function isValidDateString(dateStr: string): boolean {
+  if (!dateStr || typeof dateStr !== 'string') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const parts = dateStr.split('-');
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  
+  if (month < 1 || month > 12) return false;
+  
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day < 1 || day > daysInMonth) return false;
+  
+  return true;
+}
+
+// Helper to get local date in YYYY-MM-DD format
+function getLocalTodayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // Helper to parse a YYYY-MM-DD date string as a pure UTC Date
 function parseUTCDate(dateStr: string): Date {
@@ -99,12 +158,26 @@ async function saveFile(file: File | null): Promise<string | null> {
 // 1. AUTHENTICATION ACTIONS
 // ----------------------------------------------------
 export async function handleLogin(prevState: any, formData: FormData) {
+  const reqHeaders = await headers();
+  const ip = reqHeaders.get('x-forwarded-for') || 'local';
+
+  const rateCheck = checkRateLimit(ip);
+  if (!rateCheck.allowed) {
+    return { success: false, error: `Too many login failures. Locked out. Please try again in ${rateCheck.waitTimeSeconds} seconds.` };
+  }
+
   const password = formData.get('password') as string;
   if (!password) {
     return { success: false, error: 'Password is required.' };
   }
+
+  if (!validateLength(password, 100)) {
+    return { success: false, error: 'Password is too long.' };
+  }
   
   const ok = await loginAdmin(password);
+  recordLoginAttempt(ip, ok);
+
   if (ok) {
     return { success: true };
   } else {
@@ -142,6 +215,18 @@ export async function addEmployee(formData: FormData) {
     return { success: false, error: 'Please fill all required fields.' };
   }
 
+  if (!validateLength(employee_id, 50) ||
+      !validateLength(name, 100) ||
+      !validateLength(designation, 100) ||
+      !validateLength(department, 100) ||
+      !validateLength(phone, 20)) {
+    return { success: false, error: 'Input fields exceed length limits.' };
+  }
+
+  if (!isValidDateString(joining_date)) {
+    return { success: false, error: 'Invalid joining date format or value. Please use YYYY-MM-DD.' };
+  }
+
   try {
     const db = await getDb();
     
@@ -151,7 +236,7 @@ export async function addEmployee(formData: FormData) {
       return { success: false, error: 'Employee ID already exists.' };
     }
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     // Insert employee
     const result = await db.run(
@@ -168,7 +253,7 @@ export async function addEmployee(formData: FormData) {
       await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'Sick', sl_allocated]);
       await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'Earned', el_allocated]);
       await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'Maternity', ml_allocated]);
-      await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'LWP', 365.0]); // Leave Without Pay is effectively unlimited
+      await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'LWP', 9999.0]); // Leave Without Pay is effectively unlimited
     }
 
     await db.run('COMMIT');
@@ -206,6 +291,19 @@ export async function updateEmployee(formData: FormData) {
     return { success: false, error: 'Please fill all required fields.' };
   }
 
+  if (!validateLength(employee_id, 50) ||
+      !validateLength(name, 100) ||
+      !validateLength(designation, 100) ||
+      !validateLength(department, 100) ||
+      !validateLength(phone, 20) ||
+      !validateLength(status, 20)) {
+    return { success: false, error: 'Input fields exceed length limits.' };
+  }
+
+  if (!isValidDateString(joining_date)) {
+    return { success: false, error: 'Invalid joining date format or value. Please use YYYY-MM-DD.' };
+  }
+
   try {
     const db = await getDb();
 
@@ -215,7 +313,7 @@ export async function updateEmployee(formData: FormData) {
       return { success: false, error: 'Employee ID already exists for another employee.' };
     }
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     await db.run(
       `UPDATE employees 
@@ -253,7 +351,7 @@ export async function deleteEmployee(id: number) {
     // Fetch all attachment paths for this employee's leave records
     const records = await db.all('SELECT attachment_path FROM leave_records WHERE employee_id = ?', id);
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     // Delete employee (cascades database delete to leave_records)
     await db.run('DELETE FROM employees WHERE id = ?', id);
@@ -374,6 +472,16 @@ export async function addLeaveRecord(formData: FormData) {
     return { success: false, error: 'All fields marked with * are required.' };
   }
 
+  if (!validateLength(leave_type, 50) ||
+      !validateLength(reason, 2000) ||
+      !validateLength(remarks, 2000)) {
+    return { success: false, error: 'Input fields exceed length limits.' };
+  }
+
+  if (!isValidDateString(start_date) || !isValidDateString(end_date)) {
+    return { success: false, error: 'Invalid start or end date format. Please use YYYY-MM-DD.' };
+  }
+
   if (parseUTCDate(start_date) > parseUTCDate(end_date)) {
     return { success: false, error: 'Start date cannot be after end date.' };
   }
@@ -402,7 +510,12 @@ export async function addLeaveRecord(formData: FormData) {
       return { success: false, error: 'Calculated leave duration is 0 days. Check holiday/weekend settings.' };
     }
 
-    // Check if employee already has overlapping leave records
+    // Save attachment (do this outside of the transaction since filesystem operations are slow)
+    newSavedFile = await saveFile(file);
+
+    await db.run('BEGIN IMMEDIATE');
+
+    // Check if employee already has overlapping leave records (inside transaction to prevent race conditions)
     const overlappingRecords = await db.all(
       `SELECT id, start_date, end_date, actual_days FROM leave_records 
        WHERE employee_id = ? 
@@ -412,6 +525,8 @@ export async function addLeaveRecord(formData: FormData) {
     );
 
     if (hasOverlapConflict(start_date, end_date, is_half_day, overlappingRecords)) {
+      await db.run('ROLLBACK');
+      if (newSavedFile) await deleteFile(newSavedFile);
       return { 
         success: false, 
         error: `Leave request overlaps with existing leave records in the selected range.` 
@@ -421,23 +536,20 @@ export async function addLeaveRecord(formData: FormData) {
     // Check leave balance (except for LWP)
     if (leave_type !== 'LWP') {
       const balance = await db.get(
-        'SELECT allocated_days, used_days FROM leave_balances WHERE employee_id = ? AND leave_type = ?',
+        'SELECT allocated_days, used_days, encashed_days FROM leave_balances WHERE employee_id = ? AND leave_type = ?',
         [employee_id, leave_type]
       );
       
-      const currentBalance = balance ? (balance.allocated_days - balance.used_days) : 0;
+      const currentBalance = balance ? (balance.allocated_days - balance.used_days - (balance.encashed_days || 0)) : 0;
       if (actualDays > currentBalance) {
+        await db.run('ROLLBACK');
+        if (newSavedFile) await deleteFile(newSavedFile);
         return { 
           success: false, 
           error: `Insufficient leave balance. Remaining ${leave_type} balance is ${currentBalance} days, but requested ${actualDays} days.` 
         };
       }
     }
-
-    // Save attachment
-    newSavedFile = await saveFile(file);
-
-    await db.run('BEGIN TRANSACTION');
 
     // Record leave
     await db.run(
@@ -487,11 +599,11 @@ export async function deleteLeaveRecord(id: number) {
     }
 
     // Start transaction
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     // Restore balance
     await db.run(
-      'UPDATE leave_balances SET used_days = used_days - ? WHERE employee_id = ? AND leave_type = ?',
+      'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
       [record.actual_days, record.employee_id, record.leave_type]
     );
 
@@ -540,6 +652,16 @@ export async function updateLeaveRecord(formData: FormData) {
     return { success: false, error: 'All fields marked with * are required.' };
   }
 
+  if (!validateLength(leave_type, 50) ||
+      !validateLength(reason, 2000) ||
+      !validateLength(remarks, 2000)) {
+    return { success: false, error: 'Input fields exceed length limits.' };
+  }
+
+  if (!isValidDateString(start_date) || !isValidDateString(end_date)) {
+    return { success: false, error: 'Invalid start or end date format. Please use YYYY-MM-DD.' };
+  }
+
   if (parseUTCDate(start_date) > parseUTCDate(end_date)) {
     return { success: false, error: 'Start date cannot be after end date.' };
   }
@@ -578,11 +700,11 @@ export async function updateLeaveRecord(formData: FormData) {
       return { success: false, error: 'Calculated leave duration is 0 days. Check holiday/weekend settings.' };
     }
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     // 1. Temporarily restore old balance
     await db.run(
-      'UPDATE leave_balances SET used_days = used_days - ? WHERE employee_id = ? AND leave_type = ?',
+      'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
       [oldRecord.actual_days, oldRecord.employee_id, oldRecord.leave_type]
     );
 
@@ -606,11 +728,11 @@ export async function updateLeaveRecord(formData: FormData) {
     // 3. Check new balance limits (except for LWP)
     if (leave_type !== 'LWP') {
       const balance = await db.get(
-        'SELECT allocated_days, used_days FROM leave_balances WHERE employee_id = ? AND leave_type = ?',
+        'SELECT allocated_days, used_days, encashed_days FROM leave_balances WHERE employee_id = ? AND leave_type = ?',
         [employee_id, leave_type]
       );
       
-      const currentBalance = balance ? (balance.allocated_days - balance.used_days) : 0;
+      const currentBalance = balance ? (balance.allocated_days - balance.used_days - (balance.encashed_days || 0)) : 0;
       if (actualDays > currentBalance) {
         await db.run('ROLLBACK');
         return { 
@@ -643,7 +765,7 @@ export async function updateLeaveRecord(formData: FormData) {
     // 5. Update leave record
     await db.run(
       `UPDATE leave_records 
-       SET employee_id = ?, leave_type = ?, start_date = ?, end_date = ?, actual_days = ?, reason = ?, attachment_path = ?, remarks = ?
+       SET employee_id = ?, leave_type = ?, start_date = ?, end_date = ?, actual_days = ?, reason = ?, attachment_path = ?, remarks = ?, modified_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [employee_id, leave_type, start_date, end_date, actualDays, reason, attachmentPath, remarks, id]
     );
@@ -695,6 +817,10 @@ export async function recordLateAttendance(formData: FormData) {
     return { success: false, error: 'Employee and Month are required.' };
   }
 
+  if (!validateLength(month_year, 10)) {
+    return { success: false, error: 'Month field exceeds length limits.' };
+  }
+
   try {
     const db = await getDb();
     
@@ -708,12 +834,12 @@ export async function recordLateAttendance(formData: FormData) {
     // Check if we already have a record for this month
     const existing = await db.get('SELECT id, deducted_cl FROM late_deductions WHERE employee_id = ? AND month_year = ?', [employee_id, month_year]);
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     if (existing) {
       // Revert previous CL deduction
       await db.run(
-        'UPDATE leave_balances SET used_days = used_days - ? WHERE employee_id = ? AND leave_type = ?',
+        'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
         [existing.deducted_cl, employee_id, 'Casual']
       );
 
@@ -764,6 +890,10 @@ export async function logLeaveEncashment(formData: FormData) {
     return { success: false, error: 'Employee and valid days are required.' };
   }
 
+  if (!validateLength(remarks, 2000)) {
+    return { success: false, error: 'Remarks exceed length limits.' };
+  }
+
   try {
     const db = await getDb();
 
@@ -782,7 +912,7 @@ export async function logLeaveEncashment(formData: FormData) {
       return { success: false, error: `Insufficient Earned Leave. Available to encash: ${available} days, but requested ${encash_days} days.` };
     }
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     // Update encashment balance
     await db.run(
@@ -790,11 +920,12 @@ export async function logLeaveEncashment(formData: FormData) {
       [encash_days, employee_id, 'Earned']
     );
 
-    // Save as a leave record with encashment status or remarks
+    // Save as a leave record with encashment status or remarks (using local today string)
+    const today = getLocalTodayStr();
     await db.run(
       `INSERT INTO leave_records (employee_id, leave_type, start_date, end_date, actual_days, reason, remarks)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [employee_id, 'Earned (Encashed)', new Date().toISOString().split('T')[0], new Date().toISOString().split('T')[0], encash_days, 'Earned Leave Encashment', remarks]
+      [employee_id, 'Earned (Encashed)', today, today, encash_days, 'Earned Leave Encashment', remarks]
     );
 
     await db.run('COMMIT');
@@ -828,6 +959,14 @@ export async function updateSystemSettings(formData: FormData) {
     return { success: false, error: 'All configurations must be filled.' };
   }
 
+  if (!validateLength(institute_name, 200) ||
+      !validateLength(weekend_days, 200) ||
+      !validateLength(sandwich_rule, 10) ||
+      !validateLength(late_cl_threshold, 10) ||
+      !validateLength(new_password, 100)) {
+    return { success: false, error: 'Input fields exceed length limits.' };
+  }
+
   // Validate weekend_days names
   const validDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const inputDays = weekend_days.toLowerCase().split(',').map(d => d.trim());
@@ -848,7 +987,7 @@ export async function updateSystemSettings(formData: FormData) {
   try {
     const db = await getDb();
     
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
 
     await db.run('UPDATE system_settings SET value = ? WHERE key = ?', [institute_name, 'institute_name']);
     await db.run('UPDATE system_settings SET value = ? WHERE key = ?', [weekend_days.toLowerCase(), 'weekend_days']);
@@ -893,6 +1032,14 @@ export async function addHoliday(formData: FormData) {
     return { success: false, error: 'Title, Start Date, and End Date are required.' };
   }
 
+  if (!validateLength(title, 100)) {
+    return { success: false, error: 'Holiday title exceeds length limits.' };
+  }
+
+  if (!isValidDateString(start_date) || !isValidDateString(end_date)) {
+    return { success: false, error: 'Invalid start or end date format. Please use YYYY-MM-DD.' };
+  }
+
   try {
     const db = await getDb();
     await db.run(
@@ -932,6 +1079,10 @@ export async function addDepartment(formData: FormData) {
   const name = formData.get('name') as string;
   if (!name || name.trim().length === 0) {
     return { success: false, error: 'Department name is required.' };
+  }
+
+  if (!validateLength(name, 100)) {
+    return { success: false, error: 'Department name exceeds length limits.' };
   }
 
   try {
@@ -997,7 +1148,7 @@ export async function importEmployeesFromCSV(formData: FormData) {
       return { success: false, error: 'CSV file is empty.' };
     }
 
-    await db.run('BEGIN TRANSACTION');
+    await db.run('BEGIN IMMEDIATE');
     let importedCount = 0;
     const skippedDuplicates: string[] = [];
 
@@ -1013,9 +1164,21 @@ export async function importEmployeesFromCSV(formData: FormData) {
       const designation = columns[2];
       const department = columns[3];
       const phone = columns[4] || '';
-      const joining_date = columns[5] || new Date().toISOString().split('T')[0];
+      let joining_date = columns[5];
 
       if (!employee_id || !name || !designation || !department) continue;
+
+      if (!validateLength(employee_id, 50) ||
+          !validateLength(name, 100) ||
+          !validateLength(designation, 100) ||
+          !validateLength(department, 100) ||
+          !validateLength(phone, 20)) {
+        continue;
+      }
+
+      if (!isValidDateString(joining_date)) {
+        joining_date = getLocalTodayStr();
+      }
 
       // Ensure department exists in departments table
       await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', department.trim());
@@ -1038,7 +1201,7 @@ export async function importEmployeesFromCSV(formData: FormData) {
         await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'Sick', 14]);
         await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'Earned', 15]);
         await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'Maternity', 0]);
-        await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'LWP', 365.0]);
+        await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'LWP', 9999.0]);
       }
       importedCount++;
     }
