@@ -1,4 +1,4 @@
-# 💻 Chuti — Leave Management System
+# Chuti — Leave Management System
 
 [![Build & Release Status](https://github.com/zihaaaad/Chuti/actions/workflows/build-release.yml/badge.svg)](https://github.com/zihaaaad/Chuti/actions/workflows/build-release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/zihaaaad/Chuti?color=blue)](https://github.com/zihaaaad/Chuti/releases/latest)
@@ -10,25 +10,25 @@
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-*   **🔒 Local & Secure:** All data stays within your building. Information is stored in a robust SQLite database on the host machine.
-*   **🖥️ Multi-Mode Launcher:**
+*   **Local & Secure:** All data stays within your building. Information is stored in a robust SQLite database on the host machine.
+*   **Multi-Mode Launcher:**
     *   **Desktop App:** Run as a standalone Windows application (`Chuti-Setup.exe` or `Chuti-Portable.exe`) with a clean user interface.
     *   **LAN sharing:** Run on one main host computer and allow all colleagues on the same office Wi-Fi or LAN to access the portal from their web browsers.
-*   **👥 Single-Admin Console:** No complex employee login flows or accounts. A single administrator manages directories, records leaves, and manages settings from one interface.
-*   **📊 Preconfigured Leave Quotas:** Built-in tracking for Casual Leave (CL - 10 days), Sick Leave (SL - 14 days), Earned Leave (EL - 15 days), and Maternity Leave (ML).
-*   **⚙️ Smart Business Logic:**
+*   **Single-Admin Console:** No complex employee login flows or accounts. A single administrator manages directories, records leaves, and manages settings from one interface.
+*   **Preconfigured Leave Quotas:** Built-in tracking for Casual Leave (CL - 10 days), Sick Leave (SL - 14 days), Earned Leave (EL - 15 days), and Maternity Leave (ML).
+*   **Smart Business Logic:**
     *   **Sandwich Rule Toggle:** Automatically counts weekends and holidays falling within a leave range as taken leaves when enabled.
     *   **Late Attendance Deductions:** Automatically calculates and deducts Casual Leave (CL) days based on monthly late count thresholds (e.g., 3 lates = 1 CL day deducted).
     *   **Leave Encashment:** Easily log and deduct encashed Earned Leave days.
-*   **📎 Document Attachments:** Upload scans, medical certificates, or applications directly to local storage and preview them inside the app.
-*   **🖨️ A4 Landscape Reports:** Stylized, printer-friendly reports formatted for A4 landscape layouts (Leave Ledgers, Monthly Payroll Summaries, and Excel-compatible CSV exports).
-*   **🛡️ Power-Resistant Integrity:** Runs in Write-Ahead Logging (WAL) SQLite mode to prevent database corruption from sudden power cuts, and automatically schedules dated rolling backups.
+*   **Document Attachments:** Upload scans, medical certificates, or applications directly to local storage and preview them inside the app.
+*   **A4 Landscape Reports:** Stylized, printer-friendly reports formatted for A4 landscape layouts (Leave Ledgers, Monthly Payroll Summaries, and Excel-compatible CSV exports).
+*   **Power-Resistant Integrity:** Runs in Write-Ahead Logging (WAL) SQLite mode to prevent database corruption from sudden power cuts, and automatically schedules dated rolling backups.
 
 ---
 
-## 📥 Installation & Usage
+## Installation & Usage
 
 ### Method A: Standalone Desktop App (Recommended)
 No technical knowledge or pre-installed software is required.
@@ -60,7 +60,7 @@ npm run start-lan
 
 ---
 
-## 🔑 Default Credentials
+## Default Credentials
 
 Upon opening the login screen, enter the default admin password:
 ```text
@@ -71,7 +71,7 @@ admin123
 
 ---
 
-## 📶 Office LAN Sharing
+## Office LAN Sharing
 
 Chuti is built to work as a shared portal on your local network:
 1.  Launch the application on the host machine.
@@ -81,7 +81,7 @@ Chuti is built to work as a shared portal on your local network:
 
 ---
 
-## 💾 System Backups & Migration
+## System Backups & Migration
 
 ### Automatic Backups
 Chuti automatically creates a timestamped database backup in your data folder's `backups/` directory on every startup, rotating and keeping the last 30 backups to save disk space.
@@ -94,6 +94,6 @@ Since the database file is completely self-contained, migrating to another compu
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details. Feel free to use, modify, and distribute it within your organization.

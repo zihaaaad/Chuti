@@ -1,6 +1,6 @@
 {
   "name": "chuti",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Offline-first Leave Management System for small organisations",
   "private": true,
   "main": "main.js",
