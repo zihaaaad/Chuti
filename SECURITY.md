@@ -13,7 +13,7 @@ Currently, only the latest major release of Chuti is actively supported with sec
 
 Security is a top priority for us. If you discover a security vulnerability in Chuti, please **DO NOT** open a public issue.
 
-Instead, please send an email directly to the maintainers at **dev@chuti.app** (or via GitHub private vulnerability reporting if enabled on the repository).
+Instead, please send an email directly to the maintainers at **zihad.connects@gmail.com** (or via GitHub private vulnerability reporting if enabled on the repository).
 
 Please include the following information in your report:
 - Type of issue (e.g., buffer overflow, SQL injection, cross-site scripting, etc.)

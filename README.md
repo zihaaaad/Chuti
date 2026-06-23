@@ -94,6 +94,12 @@ Since the database file is completely self-contained, migrating to another compu
 
 ---
 
+## Contributing
+
+We welcome contributions to Chuti! If you'd like to help improve the system, please check out our [Contributing Guidelines](https://github.com/zihaaaad/Chuti?tab=contributing-ov-file) for more details on how to get started.
+
+---
+
 ## License
 
 This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details. Feel free to use, modify, and distribute it within your organization.
