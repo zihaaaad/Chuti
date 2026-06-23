@@ -17,7 +17,7 @@ export default async function DashboardPage() {
 
   const leaveStat = await db.get(
     `SELECT COUNT(DISTINCT employee_id) as count FROM leave_records 
-     WHERE ? BETWEEN start_date AND end_date`,
+     WHERE ? BETWEEN start_date AND end_date AND leave_type != 'Earned (Encashed)'`,
     [todayStr]
   );
   const onLeaveToday = leaveStat?.count || 0;
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
      FROM leave_records r 
      JOIN employees e ON r.employee_id = e.id 
      LEFT JOIN departments d ON e.department_id = d.id
-     WHERE ? BETWEEN r.start_date AND r.end_date
+     WHERE ? BETWEEN r.start_date AND r.end_date AND r.leave_type != 'Earned (Encashed)'
      ORDER BY r.recorded_at DESC`,
     [todayStr]
   );

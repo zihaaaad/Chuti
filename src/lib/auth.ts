@@ -34,6 +34,13 @@ export async function loginAdmin(password: string): Promise<boolean> {
   // Generate a unique secure session token
   const sessionValue = crypto.randomBytes(32).toString('hex');
   
+  // Clean up expired sessions (older than 7 days) to prevent table bloat
+  try {
+    await db.run("DELETE FROM admin_sessions WHERE created_at < datetime('now', '-7 days')");
+  } catch (err) {
+    console.error('Failed to clean up expired sessions:', err);
+  }
+
   // Store session in database
   await db.run('INSERT INTO admin_sessions (session_id) VALUES (?)', sessionValue);
   

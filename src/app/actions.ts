@@ -210,10 +210,14 @@ export async function addEmployee(formData: FormData) {
   const phone = formData.get('phone') as string;
   
   // Custom leave allocations
-  const cl_allocated = parseFloat(formData.get('cl_allocated') as string || '10');
-  const sl_allocated = parseFloat(formData.get('sl_allocated') as string || '14');
-  const el_allocated = parseFloat(formData.get('el_allocated') as string || '15');
-  const ml_allocated = parseFloat(formData.get('ml_allocated') as string || '0');
+  let cl_allocated = parseFloat(formData.get('cl_allocated') as string);
+  if (isNaN(cl_allocated) || cl_allocated < 0) cl_allocated = 10;
+  let sl_allocated = parseFloat(formData.get('sl_allocated') as string);
+  if (isNaN(sl_allocated) || sl_allocated < 0) sl_allocated = 14;
+  let el_allocated = parseFloat(formData.get('el_allocated') as string);
+  if (isNaN(el_allocated) || el_allocated < 0) el_allocated = 15;
+  let ml_allocated = parseFloat(formData.get('ml_allocated') as string);
+  if (isNaN(ml_allocated) || ml_allocated < 0) ml_allocated = 0;
 
   if (!employee_id || !name || !designation || !department || !joining_date) {
     return { success: false, error: 'Please fill all required fields.' };
@@ -292,10 +296,14 @@ export async function updateEmployee(formData: FormData) {
   const phone = formData.get('phone') as string;
   const status = formData.get('status') as string;
 
-  const cl_allocated = parseFloat(formData.get('cl_allocated') as string || '10');
-  const sl_allocated = parseFloat(formData.get('sl_allocated') as string || '14');
-  const el_allocated = parseFloat(formData.get('el_allocated') as string || '15');
-  const ml_allocated = parseFloat(formData.get('ml_allocated') as string || '0');
+  let cl_allocated = parseFloat(formData.get('cl_allocated') as string);
+  if (isNaN(cl_allocated) || cl_allocated < 0) cl_allocated = 10;
+  let sl_allocated = parseFloat(formData.get('sl_allocated') as string);
+  if (isNaN(sl_allocated) || sl_allocated < 0) sl_allocated = 14;
+  let el_allocated = parseFloat(formData.get('el_allocated') as string);
+  if (isNaN(el_allocated) || el_allocated < 0) el_allocated = 15;
+  let ml_allocated = parseFloat(formData.get('ml_allocated') as string);
+  if (isNaN(ml_allocated) || ml_allocated < 0) ml_allocated = 0;
 
   if (!id || !employee_id || !name || !designation || !department || !joining_date) {
     return { success: false, error: 'Please fill all required fields.' };
@@ -620,11 +628,18 @@ export async function deleteLeaveRecord(id: number) {
     // Start transaction
     await db.run('BEGIN IMMEDIATE');
 
-    // Restore balance
-    await db.run(
-      'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
-      [record.actual_days, record.employee_id, record.leave_type]
-    );
+    // Restore balance correctly mapping encashments to el_encashed
+    if (record.leave_type === 'Earned (Encashed)') {
+      await db.run(
+        'UPDATE leave_balances SET encashed_days = MAX(0, encashed_days - ?) WHERE employee_id = ? AND leave_type = ?',
+        [record.actual_days, record.employee_id, 'Earned']
+      );
+    } else {
+      await db.run(
+        'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
+        [record.actual_days, record.employee_id, record.leave_type]
+      );
+    }
 
     // Delete record
     await db.run('DELETE FROM leave_records WHERE id = ?', id);
@@ -721,11 +736,18 @@ export async function updateLeaveRecord(formData: FormData) {
 
     await db.run('BEGIN IMMEDIATE');
 
-    // 1. Temporarily restore old balance
-    await db.run(
-      'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
-      [oldRecord.actual_days, oldRecord.employee_id, oldRecord.leave_type]
-    );
+    // 1. Temporarily restore old balance correctly mapping encashments
+    if (oldRecord.leave_type === 'Earned (Encashed)') {
+      await db.run(
+        'UPDATE leave_balances SET encashed_days = MAX(0, encashed_days - ?) WHERE employee_id = ? AND leave_type = ?',
+        [oldRecord.actual_days, oldRecord.employee_id, 'Earned']
+      );
+    } else {
+      await db.run(
+        'UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = ?',
+        [oldRecord.actual_days, oldRecord.employee_id, oldRecord.leave_type]
+      );
+    }
 
     // 2. Check overlap (excluding this leave record itself)
     const overlappingRecords = await db.all(
@@ -746,9 +768,10 @@ export async function updateLeaveRecord(formData: FormData) {
 
     // 3. Check new balance limits (except for LWP)
     if (leave_type !== 'LWP') {
+      const targetLeaveType = leave_type === 'Earned (Encashed)' ? 'Earned' : leave_type;
       const balance = await db.get(
         'SELECT allocated_days, used_days, encashed_days FROM leave_balances WHERE employee_id = ? AND leave_type = ?',
-        [employee_id, leave_type]
+        [employee_id, targetLeaveType]
       );
       
       const currentBalance = balance ? (balance.allocated_days - balance.used_days - (balance.encashed_days || 0)) : 0;
@@ -789,11 +812,18 @@ export async function updateLeaveRecord(formData: FormData) {
       [employee_id, leave_type, start_date, end_date, actualDays, reason, attachmentPath, remarks, id]
     );
 
-    // 6. Deduct new balance
-    await db.run(
-      'UPDATE leave_balances SET used_days = used_days + ? WHERE employee_id = ? AND leave_type = ?',
-      [actualDays, employee_id, leave_type]
-    );
+    // 6. Deduct new balance correctly mapping encashments
+    if (leave_type === 'Earned (Encashed)') {
+      await db.run(
+        'UPDATE leave_balances SET encashed_days = encashed_days + ? WHERE employee_id = ? AND leave_type = ?',
+        [actualDays, employee_id, 'Earned']
+      );
+    } else {
+      await db.run(
+        'UPDATE leave_balances SET used_days = used_days + ? WHERE employee_id = ? AND leave_type = ?',
+        [actualDays, employee_id, leave_type]
+      );
+    }
 
     await db.run('COMMIT');
 
@@ -845,7 +875,7 @@ export async function recordLateAttendance(formData: FormData) {
     
     // Fetch threshold from settings
     const thresholdSetting = await db.get('SELECT value FROM system_settings WHERE key = ?', 'late_cl_threshold');
-    const threshold = parseInt(thresholdSetting?.value || '3');
+    const threshold = Math.max(1, parseInt(thresholdSetting?.value || '3'));
 
     // Calculate how many CL days to deduct (e.g. 3 lates = 1 CL day)
     const deductedCL = Math.floor(late_count / threshold);
