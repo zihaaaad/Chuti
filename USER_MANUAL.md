@@ -1,10 +1,10 @@
-# 📘 Chuti User Manual & Administration Guide
+# Chuti User Manual & Administration Guide
 
 Welcome to the **Chuti Leave Management System**! This guide is designed for administrators, HR coordinators, and school/institute managers. You do **not** need any programming or database experience to run, manage, or migrate this system.
 
 ---
 
-## 🚀 How to Run the System
+## How to Run the System
 
 ### Standard Desktop Application (Recommended)
 1.  **Start:** Double-click the **Chuti** desktop icon or application file (`Chuti.exe`).
@@ -22,7 +22,7 @@ If you are running the system via the code files on Windows:
 
 ---
 
-## 📶 Office LAN Sharing (Accessing from other PCs)
+## Office LAN Sharing (Accessing from other PCs)
 
 You only need to install and run the application on **one host computer** (for example, the HR administrator's computer). Other computers, tablets, or smartphones connected to the same office Wi-Fi can access the portal instantly:
 
@@ -33,18 +33,18 @@ You only need to install and run the application on **one host computer** (for e
 
 ---
 
-## ⚙️ Core Administration Tasks
+## Core Administration Tasks
 
-### 🔑 Setting up the Password
+### Setting up the Password
 *   The default password is **`admin123`**.
 *   Change this immediately by navigating to **Console** -> **Settings** -> **Change Password**.
 
-### 👥 Managing Employee Directories
+### Managing Employee Directories
 *   **Manual Entry:** Go to **Employees** -> **Add Employee**. Fill in their ID code, name, designation, joining date, and select their department.
 *   **Custom Quotas:** You can configure custom yearly quotas (Casual Leave, Sick Leave, Earned Leave) for each employee profile.
 *   **Bulk CSV Import:** To import many employees at once, click **Download Template CSV** on the Employees page, fill in the columns using Microsoft Excel or Google Sheets, and click **Upload Employees from CSV**.
 
-### 📅 Recording Leaves
+### Recording Leaves
 1.  Go to **Leave Records** -> **Record A Leave**.
 2.  Select the employee, leave type, start/end dates, and state the reason.
 3.  **Attachments:** If you have a scanned medical certificate or physical application form, click the **Attachment** field to upload the document.
@@ -52,7 +52,7 @@ You only need to install and run the application on **one host computer** (for e
 
 ---
 
-## 💾 Backups & Data Security
+## Backups & Data Security
 
 *   **WAL Mode Safeguards:** Chuti runs the local SQLite database in WAL (Write-Ahead Logging) mode. This actively prevents database corruption even if the host computer shuts down suddenly due to a power outage.
 *   **Auto-Backups:** The app automatically backs up your database to the `backups/` directory inside your chosen data folder every time it starts up. The system retains the last **30 backups** and deletes older ones to save disk space.
@@ -60,7 +60,7 @@ You only need to install and run the application on **one host computer** (for e
 
 ---
 
-## 🖥️ PC Migration Guide
+## PC Migration Guide
 
 To transfer your entire leave records history, settings, and uploaded files to a new computer:
 
