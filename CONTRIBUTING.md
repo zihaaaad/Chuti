@@ -11,7 +11,7 @@ If you've noticed a bug or have a feature request, please make sure to check our
 1. **Fork** the repository on GitHub.
 2. **Clone** your fork locally:
    ```bash
-   git clone https://github.com/YOUR-USERNAME/Chuti.git
+   git clone https://github.com/zihaaaad/Chuti.git
    cd Chuti
    ```
 3. **Install Dependencies**:
