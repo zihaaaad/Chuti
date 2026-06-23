@@ -431,7 +431,20 @@ app.whenReady().then(async () => {
     log(`Using port ${appPort}`);
 
     // 3. Start Next.js server
-    serverProc = spawnServer(appPort, dataDir);
+    if (app.isPackaged) {
+      log('Starting Next.js server in-process (production)…');
+      process.env.PORT = String(appPort);
+      process.env.HOSTNAME = '0.0.0.0';
+      process.env.APP_DATA_DIR = dataDir;
+      process.env.NODE_ENV = 'production';
+      
+      const serverPath = path.join(process.resourcesPath, 'server', 'server.js');
+      log(`Loading server module: ${serverPath}`);
+      require(serverPath);
+    } else {
+      log('Spawning Next.js server (development)…');
+      serverProc = spawnServer(appPort, dataDir);
+    }
 
     // 4. Wait for server to be ready
     log('Waiting for server to be ready…');
