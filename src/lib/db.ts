@@ -111,7 +111,7 @@ export async function getDb(): Promise<Database> {
       employee_id TEXT UNIQUE NOT NULL,
       department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
       designation TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE,
       join_date TEXT NOT NULL,
       phone TEXT,
       status TEXT DEFAULT 'Active'
@@ -141,7 +141,7 @@ export async function getDb(): Promise<Database> {
         employee_id TEXT UNIQUE NOT NULL,
         department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
         designation TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE,
         join_date TEXT NOT NULL,
         phone TEXT,
         status TEXT DEFAULT 'Active'
@@ -169,6 +169,34 @@ export async function getDb(): Promise<Database> {
     await db.exec("DROP TABLE employees");
     await db.exec("ALTER TABLE employees_new RENAME TO employees");
     console.log("Migration complete.");
+  }
+
+  // Schema Migration: Make 'email' column nullable if it is currently NOT NULL
+  const columnsAfterDept = await db.all("PRAGMA table_info(employees)");
+  const emailCol = columnsAfterDept.find((col: any) => col.name === 'email');
+  if (emailCol && emailCol.notnull === 1) {
+    console.log("Migrating employees table to make 'email' column nullable...");
+    await db.exec(`
+      CREATE TABLE employees_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        employee_id TEXT UNIQUE NOT NULL,
+        department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
+        designation TEXT NOT NULL,
+        email TEXT UNIQUE,
+        join_date TEXT NOT NULL,
+        phone TEXT,
+        status TEXT DEFAULT 'Active'
+      )
+    `);
+    await db.exec(`
+      INSERT INTO employees_new (id, name, employee_id, department_id, designation, email, join_date, phone, status)
+      SELECT id, name, employee_id, department_id, designation, email, join_date, phone, status
+      FROM employees
+    `);
+    await db.exec("DROP TABLE employees");
+    await db.exec("ALTER TABLE employees_new RENAME TO employees");
+    console.log("Email nullability migration complete.");
   }
 
   await db.exec(`
