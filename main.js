@@ -438,6 +438,13 @@ app.whenReady().then(async () => {
       process.env.APP_DATA_DIR = dataDir;
       process.env.NODE_ENV = 'production';
       
+      // Set NODE_PATH so the out-of-asar server.js can resolve dependencies in app.asar/node_modules
+      const appNodeModules = path.join(__dirname, 'node_modules');
+      process.env.NODE_PATH = process.env.NODE_PATH
+        ? `${process.env.NODE_PATH}${path.delimiter}${appNodeModules}`
+        : appNodeModules;
+      require('module')._initPaths();
+      
       const serverPath = path.join(process.resourcesPath, 'server', 'server.js');
       log(`Loading server module: ${serverPath}`);
       require(serverPath);
