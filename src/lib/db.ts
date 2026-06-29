@@ -47,6 +47,17 @@ function backupDatabase() {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupPath = path.join(BACKUP_DIR, `database_backup_${timestamp}.db`);
       fs.copyFileSync(DB_PATH, backupPath);
+      
+      const walPath = DB_PATH + '-wal';
+      if (fs.existsSync(walPath)) {
+        fs.copyFileSync(walPath, backupPath + '-wal');
+      }
+      
+      const shmPath = DB_PATH + '-shm';
+      if (fs.existsSync(shmPath)) {
+        fs.copyFileSync(shmPath, backupPath + '-shm');
+      }
+      
       console.log(`Database backup created successfully at: ${backupPath}`);
       rotateBackups();
     }
@@ -117,6 +128,11 @@ export async function getDb(): Promise<Database> {
       status TEXT DEFAULT 'Active'
     )
   `);
+
+  // Run safe schema migrations for employees table before data migrations
+  try { await db.exec('ALTER TABLE employees ADD COLUMN phone TEXT;'); } catch {}
+  try { await db.exec('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active";'); } catch {}
+
 
   // Schema Migration: Convert text 'department' column to 'department_id' foreign key if needed
   const columns = await db.all("PRAGMA table_info(employees)");
@@ -246,8 +262,6 @@ export async function getDb(): Promise<Database> {
   `);
 
   // Run safe schema migrations (adds columns to existing DB files if code updates)
-  try { await db.exec('ALTER TABLE employees ADD COLUMN phone TEXT;'); } catch {}
-  try { await db.exec('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active";'); } catch {}
   try { await db.exec('ALTER TABLE leave_balances ADD COLUMN encashed_days REAL DEFAULT 0;'); } catch {}
   try { await db.exec('ALTER TABLE leave_records ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'); } catch {}
 
