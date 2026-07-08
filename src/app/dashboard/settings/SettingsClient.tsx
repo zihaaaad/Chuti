@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { updateSystemSettings, addHoliday, deleteHoliday, addDepartment, deleteDepartment } from '@/app/actions';
-import { Settings, Lock, Check, Trash2, Calendar, Briefcase, X, Plus } from 'lucide-react';
+import { updateSystemSettings, addHoliday, deleteHoliday, addDepartment, deleteDepartment, restoreBackup } from '@/app/actions';
+import { Settings, Lock, Check, Trash2, Calendar, Briefcase, X, Plus, Database, RotateCcw } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 
@@ -18,16 +18,29 @@ interface Department {
   name: string;
 }
 
+interface BackupFileInfo {
+  name: string;
+  size: number;
+  mtime: string;
+}
+
 interface SettingsClientProps {
   initialSettings: Record<string, string>;
   initialHolidays: Holiday[];
   initialDepartments: Department[];
+  initialBackups: BackupFileInfo[];
 }
 
-export default function SettingsClient({ 
-  initialSettings, 
-  initialHolidays, 
-  initialDepartments 
+function formatBackupSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function SettingsClient({
+  initialSettings,
+  initialHolidays,
+  initialDepartments,
+  initialBackups
 }: SettingsClientProps) {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
@@ -39,11 +52,13 @@ export default function SettingsClient({
   const settings = initialSettings;
   const holidays = initialHolidays;
   const departments = initialDepartments;
+  const backups = initialBackups;
 
   // System Settings Form States
   const [instituteName, setInstituteName] = useState(settings['institute_name'] || '');
   const [sandwichRule, setSandwichRule] = useState(settings['sandwich_rule'] || 'true');
   const [lateThreshold, setLateThreshold] = useState(settings['late_cl_threshold'] || '3');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   
   // Weekends
@@ -77,12 +92,14 @@ export default function SettingsClient({
     formData.append('sandwich_rule', sandwichRule);
     formData.append('late_cl_threshold', lateThreshold);
     formData.append('weekend_days', weekends.join(','));
+    formData.append('current_password', currentPassword);
     formData.append('new_password', newPassword);
 
     startTransition(async () => {
       const res = await updateSystemSettings(formData);
       if (res.success) {
         showToast('System settings updated successfully.', 'success');
+        setCurrentPassword('');
         setNewPassword('');
       } else {
         showToast(res.error || 'Failed to update settings.', 'error');
@@ -164,8 +181,29 @@ export default function SettingsClient({
     }
   };
 
+  const handleRestoreBackup = async (backup: BackupFileInfo) => {
+    const ok = await confirm({
+      title: 'Restore This Backup?',
+      message: `This will replace ALL current data with the backup from ${new Date(backup.mtime).toLocaleString()}. Anything recorded since then will be lost. The current database will also be snapshotted first, just in case. The app will reflect the restored data immediately — reopen the window if anything looks stale.`,
+      confirmText: 'Restore',
+      isDanger: true,
+      confirmInputText: 'RESTORE'
+    });
+    if (ok) {
+      startTransition(async () => {
+        const res = await restoreBackup(backup.name);
+        if (res.success) {
+          showToast('Backup restored successfully. Reloading…', 'success');
+          setTimeout(() => window.location.reload(), 1200);
+        } else {
+          showToast(res.error || 'Failed to restore backup.', 'error');
+        }
+      });
+    }
+  };
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
+    <div className="settings-layout-grid">
       
       {/* Left Column: System settings form */}
       <div>
@@ -257,14 +295,26 @@ export default function SettingsClient({
                 <Lock size={14} />
                 Change Admin Password
               </label>
-              <input 
-                className="form-control" 
-                type="password" 
-                id="new-pw" 
-                placeholder="Enter new admin password (leave empty to keep current)"
+              <input
+                className="form-control"
+                type="password"
+                id="current-pw"
+                placeholder="Current password (required to set a new one)"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                disabled={isPending}
+                autoComplete="current-password"
+                style={{ marginBottom: '0.5rem' }}
+              />
+              <input
+                className="form-control"
+                type="password"
+                id="new-pw"
+                placeholder="New admin password (leave both fields empty to keep current)"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={isPending}
+                autoComplete="new-password"
               />
             </div>
 
@@ -420,6 +470,59 @@ export default function SettingsClient({
                           className="btn-danger-text"
                         >
                           <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Backups & Restore */}
+        <div className="card" style={{ backgroundColor: '#ffffff' }}>
+          <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Database size={20} />
+            Backups &amp; Restore
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
+            Chuti automatically backs up the database on startup and every 12 hours. Restoring
+            replaces all current data with the selected backup — the app snapshots the current
+            state first so you can undo a wrong choice.
+          </p>
+
+          <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+            <table className="table" style={{ fontSize: '0.8125rem' }}>
+              <thead>
+                <tr>
+                  <th>Backup</th>
+                  <th>Size</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--foreground-muted)' }}>
+                      No backups yet. The first one is created automatically on the app&apos;s next startup.
+                    </td>
+                  </tr>
+                ) : (
+                  backups.map(bk => (
+                    <tr key={bk.name}>
+                      <td style={{ fontWeight: 600 }}>{new Date(bk.mtime).toLocaleString()}</td>
+                      <td>{formatBackupSize(bk.size)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreBackup(bk)}
+                          disabled={isPending}
+                          className="btn-danger-text"
+                          title={`Restore backup from ${new Date(bk.mtime).toLocaleString()}`}
+                          aria-label={`Restore backup from ${new Date(bk.mtime).toLocaleString()}`}
+                        >
+                          <RotateCcw size={14} />
                         </button>
                       </td>
                     </tr>

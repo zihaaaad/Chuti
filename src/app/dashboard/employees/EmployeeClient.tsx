@@ -5,6 +5,7 @@ import { addEmployee, updateEmployee, deleteEmployee, importEmployeesFromCSV } f
 import { Edit2, Trash2, UserPlus, X, Search, Check, FileSpreadsheet, Download } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
+import Modal from '@/components/Modal';
 
 interface Balance {
   type: string;
@@ -386,30 +387,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
       </div>
 
       {/* Add / Edit Modal Drawer */}
-      {isModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 100,
-          backdropFilter: 'blur(2px)'
-        }}>
-          <div className="card" style={{
-            width: '100%',
-            maxWidth: '550px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            position: 'relative',
-            backgroundColor: '#ffffff',
-            boxShadow: 'var(--shadow-lg)',
-            border: '1px solid var(--border)'
-          }}>
+      <Modal isOpen={isModalOpen} onClose={closeModal} maxWidth="550px" labelledBy="emp-modal-title">
             {/* Modal Header */}
             <div style={{
               display: 'flex',
@@ -419,12 +397,13 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
               paddingBottom: '1rem',
               marginBottom: '1.5rem'
             }}>
-              <h3 style={{ fontSize: '1.25rem' }}>
+              <h3 id="emp-modal-title" style={{ fontSize: '1.25rem' }}>
                 {editingEmployee ? `Edit Profile: ${editingEmployee.name}` : 'Add New Employee'}
               </h3>
-              <button 
+              <button
                 onClick={closeModal}
                 className="btn-close"
+                aria-label="Close dialog"
               >
                 <X size={20} />
               </button>
@@ -633,9 +612,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

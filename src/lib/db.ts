@@ -66,6 +66,21 @@ function backupDatabase() {
   }
 }
 
+// Exposes the resolved DB/backup paths so other modules (e.g. the restore-from-backup
+// action) can locate backup files without recomputing APP_DATA_DIR logic themselves.
+export function getPaths() {
+  return { DB_PATH, BACKUP_DIR };
+}
+
+// Closes the live connection so its file can be safely overwritten (used by restore-from-backup).
+// The next getDb() call transparently reopens at DB_PATH.
+export async function closeDb(): Promise<void> {
+  if (dbInstance) {
+    await dbInstance.close();
+    dbInstance = null;
+  }
+}
+
 export async function getDb(): Promise<Database> {
   if (dbInstance) {
     return dbInstance;

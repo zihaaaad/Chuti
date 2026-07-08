@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import Modal from './Modal';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -33,30 +34,8 @@ export default function ConfirmDialog({
   const isConfirmDisabled = confirmInputText ? inputValue !== confirmInputText : false;
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(9, 9, 11, 0.4)', // neutral dark overlay
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 100000,
-      backdropFilter: 'blur(4px)',
-      animation: 'fade-in 0.05s ease-out'
-    }}>
-      <div style={{
-        backgroundColor: '#ffffff',
-        borderRadius: 'var(--radius-lg)',
-        padding: '1.5rem',
-        width: '90%',
-        maxWidth: '400px',
-        boxShadow: 'var(--shadow-lg)',
-        border: '1px solid var(--border)',
-        animation: 'popup-scale-in 0.05s ease-out'
-      }}>
+    <Modal isOpen={isOpen} onClose={onCancel} maxWidth="400px" zIndex={100000} labelledBy="confirm-dialog-title">
+      <div style={{ padding: '1.5rem' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
           <div style={{
@@ -71,11 +50,12 @@ export default function ConfirmDialog({
           }}>
             <AlertTriangle size={20} />
           </div>
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--primary)', flex: 1 }}>{title}</h3>
-          <button 
+          <h3 id="confirm-dialog-title" style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--primary)', flex: 1 }}>{title}</h3>
+          <button
             onClick={onCancel}
             className="btn-close"
             style={{ padding: '0.25rem' }}
+            aria-label="Close dialog"
           >
             <X size={18} />
           </button>
@@ -89,10 +69,11 @@ export default function ConfirmDialog({
         {/* Optional Input Confirmation */}
         {confirmInputText && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.5rem' }}>
+            <label htmlFor="confirm-dialog-input" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.5rem', display: 'block' }}>
               Please type <strong style={{ color: 'var(--error)' }}>{confirmInputText}</strong> to confirm:
-            </p>
+            </label>
             <input
+              id="confirm-dialog-input"
               type="text"
               className="form-control"
               value={inputValue}
@@ -112,18 +93,18 @@ export default function ConfirmDialog({
 
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-          <button 
+          <button
             onClick={onCancel}
             className="btn btn-secondary"
             style={{ padding: '0.5rem 1rem' }}
           >
             {cancelText}
           </button>
-          <button 
+          <button
             onClick={onConfirm}
             disabled={isConfirmDisabled}
             className={isDanger ? 'btn btn-danger' : 'btn btn-primary'}
-            style={{ 
+            style={{
               padding: '0.5rem 1rem',
               opacity: isConfirmDisabled ? 0.5 : 1,
               cursor: isConfirmDisabled ? 'not-allowed' : 'pointer'
@@ -133,6 +114,6 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -131,18 +131,27 @@ export default function ReportsClient({
     .filter(row => row.totalLeaves > 0 || row.lateCount > 0 || filterEmpId !== ''); // Only show active items unless specifically searched
 
   // 4. Export CSV Handler
+  //
+  // csvSafe() guards against CSV/formula injection: a free-text field (leave "reason",
+  // an imported employee name, etc.) that happens to start with = + - @ would otherwise
+  // become a live formula the moment this file is opened in Excel/Sheets.
+  const csvSafe = (value: string): string => {
+    const escaped = value.replace(/"/g, '""');
+    return /^[=+\-@]/.test(escaped) ? `'${escaped}` : escaped;
+  };
+
   const exportToCSV = () => {
     let csvContent = 'data:text/csv;charset=utf-8,';
-    
+
     if (activeTab === 'logs') {
       csvContent += 'Employee ID,Name,Department,Leave Type,Start Date,End Date,Actual Days,Reason,Remarks,Recorded At\n';
       filteredLeaves.forEach(rec => {
-        csvContent += `"${rec.emp_code}","${rec.name}","${rec.department}","${rec.leave_type}","${rec.start_date}","${rec.end_date}",${rec.actual_days},"${rec.reason.replace(/"/g, '""')}","${(rec.remarks || '').replace(/"/g, '""')}","${rec.recorded_at}"\n`;
+        csvContent += `"${csvSafe(rec.emp_code)}","${csvSafe(rec.name)}","${csvSafe(rec.department)}","${csvSafe(rec.leave_type)}","${rec.start_date}","${rec.end_date}",${rec.actual_days},"${csvSafe(rec.reason)}","${csvSafe(rec.remarks || '')}","${rec.recorded_at}"\n`;
       });
     } else {
       csvContent += 'Employee ID,Name,Department,Casual Leave,Sick Leave,Earned Leave,LWP (Unpaid),Total Leaves,Late Count,Deducted CL,Net Paid Days/Payable Days\n';
       compiledPayroll.forEach(row => {
-        csvContent += `"${row.code}","${row.name}","${row.department}",${row.clCount},${row.slCount},${row.elCount},${row.lwpCount},${row.totalLeaves},${row.lateCount},${row.deductedCL},${row.netPaidDays}/${row.totalMonthDays}\n`;
+        csvContent += `"${csvSafe(row.code)}","${csvSafe(row.name)}","${csvSafe(row.department)}",${row.clCount},${row.slCount},${row.elCount},${row.lwpCount},${row.totalLeaves},${row.lateCount},${row.deductedCL},${row.netPaidDays}/${row.totalMonthDays}\n`;
       });
     }
 
@@ -395,16 +404,16 @@ export default function ReportsClient({
                       <td style={{ fontWeight: row.clCount > 0 ? 600 : 400 }}>{row.clCount} days</td>
                       <td style={{ fontWeight: row.slCount > 0 ? 600 : 400 }}>{row.slCount} days</td>
                       <td style={{ fontWeight: row.elCount > 0 ? 600 : 400 }}>{row.elCount} days</td>
-                      <td style={{ 
+                      <td style={{
                         fontWeight: row.lwpCount > 0 ? 600 : 400,
                         color: row.lwpCount > 0 ? 'var(--error)' : 'inherit'
-                      }}>{row.lwpCount} days</td>
+                      }}>{row.lwpCount > 0 && '⚠ '}{row.lwpCount} days</td>
                       <td style={{ fontWeight: 600 }}>{row.totalLeaves} days</td>
                       <td style={{ fontWeight: row.lateCount > 0 ? 600 : 400 }}>{row.lateCount}</td>
-                      <td style={{ 
+                      <td style={{
                         fontWeight: row.deductedCL > 0 ? 600 : 400,
                         color: row.deductedCL > 0 ? 'var(--warning)' : 'inherit'
-                      }}>{row.deductedCL} days</td>
+                      }}>{row.deductedCL > 0 && '⚠ '}{row.deductedCL} days</td>
                       <td style={{ 
                         fontWeight: 700,
                         backgroundColor: 'var(--primary-light)',

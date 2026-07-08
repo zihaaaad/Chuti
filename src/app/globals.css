@@ -734,6 +734,19 @@ a:hover {
   margin-top: 2rem;
 }
 
+.settings-layout-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.5rem;
+}
+
+.guide-layout-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
 /* Responsiveness media queries */
 @media (max-width: 1024px) {
   .main-content {
@@ -746,7 +759,7 @@ a:hover {
     grid-template-columns: 1fr;
     gap: 0.75rem;
   }
-  
+
   .grid-4col {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
@@ -755,6 +768,14 @@ a:hover {
   .dashboard-layout-grid {
     grid-template-columns: 1fr !important;
     gap: 1.5rem;
+  }
+
+  .settings-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-layout-grid {
+    grid-template-columns: 1fr;
   }
 }
 

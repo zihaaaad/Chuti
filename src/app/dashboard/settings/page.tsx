@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { listBackups } from '@/app/actions';
 import SettingsClient from './SettingsClient';
 
 export default async function SettingsPage() {
@@ -17,6 +18,9 @@ export default async function SettingsPage() {
   // 3. Fetch departments
   const departments = await db.all("SELECT * FROM departments ORDER BY name ASC");
 
+  // 4. Fetch available backups (for restore)
+  const backupsResult = await listBackups();
+
   return (
     <div>
       <div style={{ marginBottom: '2rem' }}>
@@ -24,10 +28,11 @@ export default async function SettingsPage() {
         <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)' }}>Configure Bangladeshi leave policies, customize weekends, add official holidays, and manage departments.</p>
       </div>
 
-      <SettingsClient 
-        initialSettings={settings} 
-        initialHolidays={holidays} 
-        initialDepartments={departments} 
+      <SettingsClient
+        initialSettings={settings}
+        initialHolidays={holidays}
+        initialDepartments={departments}
+        initialBackups={backupsResult.backups}
       />
     </div>
   );

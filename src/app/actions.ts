@@ -3,7 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
-import { getDb } from '@/lib/db';
+import type { Database } from 'sqlite';
+import { getDb, getPaths, closeDb } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
@@ -52,6 +53,33 @@ function validateLength(val: any, max: number): boolean {
     return false;
   }
   return true;
+}
+
+// Parse a leave allocation input, falling back to a default and capping at a sane ceiling
+// so a stray value (e.g. copy-paste error, 1e20) can't silently corrupt balance math downstream.
+function parseAllocation(raw: FormDataEntryValue | null, fallback: number, max = 365): number {
+  const val = parseFloat(raw as string);
+  if (isNaN(val) || val < 0) return fallback;
+  return Math.min(val, max);
+}
+
+// Find a department by case-insensitive name match, creating it if it doesn't exist.
+// Prevents "IT" and "it" from silently becoming two different departments.
+async function findOrCreateDepartment(db: Database, rawName: string): Promise<number> {
+  const name = rawName.trim();
+  const existing = await db.get('SELECT id FROM departments WHERE name = ? COLLATE NOCASE', name);
+  if (existing) return existing.id;
+  const res = await db.run('INSERT INTO departments (name) VALUES (?)', name);
+  return res.lastID!;
+}
+
+// Allowed file extensions for leave attachments — matches what the uploads route
+// declares it knows how to serve (src/app/api/uploads/[filename]/route.ts).
+const ALLOWED_ATTACHMENT_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx'];
+
+function isAllowedAttachment(file: File): boolean {
+  const ext = path.extname(file.name).toLowerCase();
+  return ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext);
 }
 
 // Date validation helper (expects YYYY-MM-DD format and valid calendar date)
@@ -139,7 +167,8 @@ async function deleteFile(filePath: string) {
 // Helper to save uploaded files asynchronously to public/uploads
 async function saveFile(file: File | null): Promise<string | null> {
   if (!file || file.size === 0 || !(file instanceof File)) return null;
-  
+  if (!isAllowedAttachment(file)) return null;
+
   try {
     const dataDir = process.env.APP_DATA_DIR || process.cwd();
     const uploadsDir = path.join(dataDir, process.env.APP_DATA_DIR ? 'uploads' : 'public/uploads');
@@ -209,15 +238,11 @@ export async function addEmployee(formData: FormData) {
   const joining_date = formData.get('joining_date') as string;
   const phone = formData.get('phone') as string;
   
-  // Custom leave allocations
-  let cl_allocated = parseFloat(formData.get('cl_allocated') as string);
-  if (isNaN(cl_allocated) || cl_allocated < 0) cl_allocated = 10;
-  let sl_allocated = parseFloat(formData.get('sl_allocated') as string);
-  if (isNaN(sl_allocated) || sl_allocated < 0) sl_allocated = 14;
-  let el_allocated = parseFloat(formData.get('el_allocated') as string);
-  if (isNaN(el_allocated) || el_allocated < 0) el_allocated = 15;
-  let ml_allocated = parseFloat(formData.get('ml_allocated') as string);
-  if (isNaN(ml_allocated) || ml_allocated < 0) ml_allocated = 0;
+  // Custom leave allocations (capped at 365 days to prevent bogus values corrupting balance math)
+  const cl_allocated = parseAllocation(formData.get('cl_allocated'), 10);
+  const sl_allocated = parseAllocation(formData.get('sl_allocated'), 14);
+  const el_allocated = parseAllocation(formData.get('el_allocated'), 15);
+  const ml_allocated = parseAllocation(formData.get('ml_allocated'), 0);
 
   if (!employee_id || !name || !designation || !department || !joining_date) {
     return { success: false, error: 'Please fill all required fields.' };
@@ -246,17 +271,13 @@ export async function addEmployee(formData: FormData) {
 
     await db.run('BEGIN IMMEDIATE');
 
-    let dept = await db.get('SELECT id FROM departments WHERE name = ?', department);
-    if (!dept) {
-      const res = await db.run('INSERT INTO departments (name) VALUES (?)', department);
-      dept = { id: res.lastID };
-    }
+    const deptId = await findOrCreateDepartment(db, department);
 
     // Insert employee
     const result = await db.run(
       `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [employee_id, name, designation, dept.id, joining_date, phone]
+      [employee_id, name, designation, deptId, joining_date, phone]
     );
 
     const empId = result.lastID;
@@ -296,14 +317,10 @@ export async function updateEmployee(formData: FormData) {
   const phone = formData.get('phone') as string;
   const status = formData.get('status') as string;
 
-  let cl_allocated = parseFloat(formData.get('cl_allocated') as string);
-  if (isNaN(cl_allocated) || cl_allocated < 0) cl_allocated = 10;
-  let sl_allocated = parseFloat(formData.get('sl_allocated') as string);
-  if (isNaN(sl_allocated) || sl_allocated < 0) sl_allocated = 14;
-  let el_allocated = parseFloat(formData.get('el_allocated') as string);
-  if (isNaN(el_allocated) || el_allocated < 0) el_allocated = 15;
-  let ml_allocated = parseFloat(formData.get('ml_allocated') as string);
-  if (isNaN(ml_allocated) || ml_allocated < 0) ml_allocated = 0;
+  const cl_allocated = parseAllocation(formData.get('cl_allocated'), 10);
+  const sl_allocated = parseAllocation(formData.get('sl_allocated'), 14);
+  const el_allocated = parseAllocation(formData.get('el_allocated'), 15);
+  const ml_allocated = parseAllocation(formData.get('ml_allocated'), 0);
 
   if (!id || !employee_id || !name || !designation || !department || !joining_date) {
     return { success: false, error: 'Please fill all required fields.' };
@@ -333,17 +350,13 @@ export async function updateEmployee(formData: FormData) {
 
     await db.run('BEGIN IMMEDIATE');
 
-    let dept = await db.get('SELECT id FROM departments WHERE name = ?', department);
-    if (!dept) {
-      const res = await db.run('INSERT INTO departments (name) VALUES (?)', department);
-      dept = { id: res.lastID };
-    }
+    const deptId = await findOrCreateDepartment(db, department);
 
     await db.run(
-      `UPDATE employees 
+      `UPDATE employees
        SET employee_id = ?, name = ?, designation = ?, department_id = ?, join_date = ?, phone = ?, status = ?
        WHERE id = ?`,
-      [employee_id, name, designation, dept.id, joining_date, phone, status, id]
+      [employee_id, name, designation, deptId, joining_date, phone, status, id]
     );
 
     // Update allocations
@@ -517,11 +530,15 @@ export async function addLeaveRecord(formData: FormData) {
     return { success: false, error: 'File upload size exceeds the 10MB limit.' };
   }
 
+  if (file && file.size > 0 && !isAllowedAttachment(file)) {
+    return { success: false, error: 'Unsupported file type. Allowed: JPG, PNG, GIF, WEBP, PDF, DOC, DOCX.' };
+  }
+
   let newSavedFile: string | null = null;
 
   try {
     const db = await getDb();
-    
+
     // Check if employee exists and is active
     const employee = await db.get('SELECT name, status FROM employees WHERE id = ?', employee_id);
     if (!employee) {
@@ -704,6 +721,10 @@ export async function updateLeaveRecord(formData: FormData) {
     return { success: false, error: 'File upload size exceeds the 10MB limit.' };
   }
 
+  if (file && file.size > 0 && !isAllowedAttachment(file)) {
+    return { success: false, error: 'Unsupported file type. Allowed: JPG, PNG, GIF, WEBP, PDF, DOC, DOCX.' };
+  }
+
   let newSavedFile: string | null = null;
   const filesToDelete: string[] = [];
 
@@ -862,8 +883,8 @@ export async function recordLateAttendance(formData: FormData) {
   const month_year = formData.get('month_year') as string; // Format: YYYY-MM
   const late_count = parseInt(formData.get('late_count') as string || '0');
 
-  if (!employee_id || !month_year || isNaN(late_count)) {
-    return { success: false, error: 'Employee and Month are required.' };
+  if (!employee_id || !month_year || isNaN(late_count) || late_count < 0) {
+    return { success: false, error: 'Employee and Month are required, and late count cannot be negative.' };
   }
 
   if (!validateLength(month_year, 10)) {
@@ -919,7 +940,7 @@ export async function recordLateAttendance(formData: FormData) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch {}
-    return { success: false, error: err.message || 'Failed to record late attendance.' };
+    return { success: false, error: sanitizeError(err, 'Failed to record late attendance.') };
   }
 }
 
@@ -985,7 +1006,7 @@ export async function logLeaveEncashment(formData: FormData) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch {}
-    return { success: false, error: err.message || 'Failed to log leave encashment.' };
+    return { success: false, error: sanitizeError(err, 'Failed to log leave encashment.') };
   }
 }
 
@@ -1002,6 +1023,7 @@ export async function updateSystemSettings(formData: FormData) {
   const sandwich_rule = formData.get('sandwich_rule') as string; // 'true' / 'false'
   const late_cl_threshold = formData.get('late_cl_threshold') as string;
   
+  const current_password = formData.get('current_password') as string;
   const new_password = formData.get('new_password') as string;
 
   if (!institute_name || !weekend_days || !sandwich_rule || !late_cl_threshold) {
@@ -1012,6 +1034,7 @@ export async function updateSystemSettings(formData: FormData) {
       !validateLength(weekend_days, 200) ||
       !validateLength(sandwich_rule, 10) ||
       !validateLength(late_cl_threshold, 10) ||
+      !validateLength(current_password, 100) ||
       !validateLength(new_password, 100)) {
     return { success: false, error: 'Input fields exceed length limits.' };
   }
@@ -1046,8 +1069,21 @@ export async function updateSystemSettings(formData: FormData) {
     if (new_password && new_password.trim().length > 0) {
       if (new_password.length < 6) {
         await db.run('ROLLBACK');
-        return { success: false, error: 'Password must be at least 6 characters long.' };
+        return { success: false, error: 'New password must be at least 6 characters long.' };
       }
+
+      if (!current_password) {
+        await db.run('ROLLBACK');
+        return { success: false, error: 'Enter your current password to set a new one.' };
+      }
+
+      const existingHash = await db.get('SELECT value FROM system_settings WHERE key = ?', 'admin_password_hash');
+      const isCurrentPasswordValid = existingHash && bcrypt.compareSync(current_password, existingHash.value);
+      if (!isCurrentPasswordValid) {
+        await db.run('ROLLBACK');
+        return { success: false, error: 'Current password is incorrect.' };
+      }
+
       const newHash = bcrypt.hashSync(new_password, 10);
       await db.run('UPDATE system_settings SET value = ? WHERE key = ?', [newHash, 'admin_password_hash']);
     }
@@ -1061,7 +1097,7 @@ export async function updateSystemSettings(formData: FormData) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch {}
-    return { success: false, error: err.message || 'Failed to update settings.' };
+    return { success: false, error: sanitizeError(err, 'Failed to update settings.') };
   }
 }
 
@@ -1098,7 +1134,7 @@ export async function addHoliday(formData: FormData) {
     revalidatePath('/dashboard/settings');
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to add holiday.' };
+    return { success: false, error: sanitizeError(err, 'Failed to add holiday.') };
   }
 }
 
@@ -1113,7 +1149,7 @@ export async function deleteHoliday(id: number) {
     revalidatePath('/dashboard/settings');
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to delete holiday.' };
+    return { success: false, error: sanitizeError(err, 'Failed to delete holiday.') };
   }
 }
 
@@ -1136,11 +1172,17 @@ export async function addDepartment(formData: FormData) {
 
   try {
     const db = await getDb();
+
+    const existing = await db.get('SELECT name FROM departments WHERE name = ? COLLATE NOCASE', name.trim());
+    if (existing) {
+      return { success: false, error: `Department "${existing.name}" already exists.` };
+    }
+
     await db.run('INSERT INTO departments (name) VALUES (?)', name.trim());
     revalidatePath('/dashboard/settings');
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to add department.' };
+    return { success: false, error: sanitizeError(err, 'Failed to add department.') };
   }
 }
 
@@ -1171,7 +1213,7 @@ export async function deleteDepartment(id: number) {
     revalidatePath('/dashboard/settings');
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to delete department.' };
+    return { success: false, error: sanitizeError(err, 'Failed to delete department.') };
   }
 }
 
@@ -1188,18 +1230,29 @@ export async function importEmployeesFromCSV(formData: FormData) {
     return { success: false, error: 'No file uploaded.' };
   }
 
+  const MAX_ROWS = 2000;
+  const BATCH_SIZE = 200; // rows per transaction, so one huge import doesn't hold the write lock for the whole file
+
   try {
     const text = await file.text();
     const db = await getDb();
-    
+
     const lines = text.split(/\r?\n/);
     if (lines.length < 2) {
       return { success: false, error: 'CSV file is empty.' };
     }
 
-    await db.run('BEGIN IMMEDIATE');
+    if (lines.length - 1 > MAX_ROWS) {
+      return { success: false, error: `CSV has too many rows. Please import at most ${MAX_ROWS} employees at a time.` };
+    }
+
     let importedCount = 0;
     const skippedDuplicates: string[] = [];
+    let rowsInCurrentBatch = 0;
+    let transactionOpen = false;
+
+    await db.run('BEGIN IMMEDIATE');
+    transactionOpen = true;
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -1229,10 +1282,7 @@ export async function importEmployeesFromCSV(formData: FormData) {
         joining_date = getLocalTodayStr();
       }
 
-      // Ensure department exists in departments table
-      await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', department.trim());
-      const dept = await db.get('SELECT id FROM departments WHERE name = ?', department.trim());
-      const deptId = dept ? dept.id : null;
+      const deptId = await findOrCreateDepartment(db, department);
 
       const existing = await db.get('SELECT id FROM employees WHERE employee_id = ?', employee_id);
       if (existing) {
@@ -1255,9 +1305,23 @@ export async function importEmployeesFromCSV(formData: FormData) {
         await db.run('INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)', [empId, 'LWP', 9999.0]);
       }
       importedCount++;
+      rowsInCurrentBatch++;
+
+      // Commit periodically so a large import doesn't hold the write lock (and block the
+      // dashboard/leave pages) for the entire file. Already-committed batches are safe to
+      // keep even if a later batch fails — re-running the import skips existing employee_ids.
+      if (rowsInCurrentBatch >= BATCH_SIZE) {
+        await db.run('COMMIT');
+        transactionOpen = false;
+        await db.run('BEGIN IMMEDIATE');
+        transactionOpen = true;
+        rowsInCurrentBatch = 0;
+      }
     }
 
-    await db.run('COMMIT');
+    if (transactionOpen) {
+      await db.run('COMMIT');
+    }
     revalidatePath('/dashboard/employees');
     return { success: true, count: importedCount, skipped: skippedDuplicates };
   } catch (err: any) {
@@ -1265,6 +1329,101 @@ export async function importEmployeesFromCSV(formData: FormData) {
       const db = await getDb();
       await db.run('ROLLBACK');
     } catch {}
-    return { success: false, error: err.message || 'CSV Import failed.' };
+    return { success: false, error: sanitizeError(err, 'CSV Import failed.') };
+  }
+}
+
+// ----------------------------------------------------
+// 10. BACKUP / RESTORE
+// ----------------------------------------------------
+export interface BackupFileInfo {
+  name: string;
+  size: number;
+  mtime: string;
+}
+
+export async function listBackups(): Promise<{ success: boolean; error?: string; backups: BackupFileInfo[] }> {
+  if (!(await isAuthenticated())) {
+    return { success: false, error: 'Unauthorized', backups: [] };
+  }
+
+  try {
+    const { BACKUP_DIR } = getPaths();
+    if (!fs.existsSync(BACKUP_DIR)) {
+      return { success: true, backups: [] };
+    }
+
+    const backups = fs.readdirSync(BACKUP_DIR)
+      .filter(f => f.startsWith('database_backup_') && f.endsWith('.db'))
+      .map(f => {
+        const stat = fs.statSync(path.join(BACKUP_DIR, f));
+        return { name: f, size: stat.size, mtime: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
+
+    return { success: true, backups };
+  } catch (err: any) {
+    return { success: false, error: sanitizeError(err, 'Failed to list backups.'), backups: [] };
+  }
+}
+
+export async function restoreBackup(filename: string) {
+  if (!(await isAuthenticated())) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  // Only accept our own generated backup filenames — blocks path traversal and restoring
+  // an arbitrary file that happens to be sitting in the backups folder.
+  const safeName = path.basename(filename);
+  if (
+    !safeName ||
+    safeName !== filename ||
+    !safeName.startsWith('database_backup_') ||
+    !safeName.endsWith('.db')
+  ) {
+    return { success: false, error: 'Invalid backup file.' };
+  }
+
+  try {
+    const { DB_PATH, BACKUP_DIR } = getPaths();
+    const backupPath = path.join(BACKUP_DIR, safeName);
+
+    if (!fs.existsSync(backupPath)) {
+      return { success: false, error: 'Backup file not found.' };
+    }
+
+    // Safety net: snapshot the current live database before overwriting it, in case the
+    // chosen backup turns out to be the wrong one.
+    if (fs.existsSync(DB_PATH)) {
+      const preRestoreName = `database_backup_prerestore_${Date.now()}.db`;
+      fs.copyFileSync(DB_PATH, path.join(BACKUP_DIR, preRestoreName));
+    }
+
+    // Close the live connection so nothing races the file swap, then clear the *current*
+    // database's WAL/SHM sidecar files — otherwise SQLite would replay them on top of the
+    // restored file the next time it's opened, reintroducing the state being restored away from.
+    await closeDb();
+    for (const ext of ['-wal', '-shm']) {
+      const sidecar = DB_PATH + ext;
+      if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
+    }
+
+    fs.copyFileSync(backupPath, DB_PATH);
+
+    const backupWal = backupPath + '-wal';
+    const backupShm = backupPath + '-shm';
+    if (fs.existsSync(backupWal)) fs.copyFileSync(backupWal, DB_PATH + '-wal');
+    if (fs.existsSync(backupShm)) fs.copyFileSync(backupShm, DB_PATH + '-shm');
+
+    // Re-open immediately so the very next request already sees the restored data.
+    await getDb();
+
+    revalidatePath('/dashboard');
+    revalidatePath('/dashboard/employees');
+    revalidatePath('/dashboard/leaves');
+    revalidatePath('/dashboard/settings');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: sanitizeError(err, 'Failed to restore backup.') };
   }
 }

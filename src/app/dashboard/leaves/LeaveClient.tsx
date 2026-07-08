@@ -5,6 +5,7 @@ import { addLeaveRecord, deleteLeaveRecord, logLeaveEncashment, updateLeaveRecor
 import { CalendarRange, X, Check, FileDown, Trash2, Search, DollarSign, Edit2, Eye } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
+import Modal from '@/components/Modal';
 
 interface LeaveRecord {
   id: number;
@@ -399,28 +400,7 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
       </div>
 
       {/* Log Leave Modal */}
-      {isLeaveModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 100,
-          backdropFilter: 'blur(2px)'
-        }}>
-          <div className="card" style={{
-            width: '100%',
-            maxWidth: '500px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            position: 'relative',
-            backgroundColor: '#ffffff'
-          }}>
+      <Modal isOpen={isLeaveModalOpen} onClose={() => setIsLeaveModalOpen(false)} maxWidth="500px" labelledBy="leave-modal-title">
             {/* Header */}
             <div style={{
               display: 'flex',
@@ -430,8 +410,8 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
               paddingBottom: '1rem',
               marginBottom: '1.5rem'
             }}>
-              <h3 style={{ fontSize: '1.25rem' }}>{editingRecord ? 'Edit Leave Record' : 'Record Leave Application'}</h3>
-              <button onClick={() => setIsLeaveModalOpen(false)} className="btn-close">
+              <h3 id="leave-modal-title" style={{ fontSize: '1.25rem' }}>{editingRecord ? 'Edit Leave Record' : 'Record Leave Application'}</h3>
+              <button onClick={() => setIsLeaveModalOpen(false)} className="btn-close" aria-label="Close dialog">
                 <X size={20} />
               </button>
             </div>
@@ -665,30 +645,10 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Log Encashment Modal */}
-      {isEncashModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 100,
-          backdropFilter: 'blur(2px)'
-        }}>
-          <div className="card" style={{
-            width: '100%',
-            maxWidth: '450px',
-            backgroundColor: '#ffffff'
-          }}>
+      <Modal isOpen={isEncashModalOpen} onClose={() => setIsEncashModalOpen(false)} maxWidth="450px" labelledBy="encash-modal-title">
             {/* Header */}
             <div style={{
               display: 'flex',
@@ -698,8 +658,8 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
               paddingBottom: '1rem',
               marginBottom: '1.5rem'
             }}>
-              <h3 style={{ fontSize: '1.25rem' }}>Log Earned Leave Encashment</h3>
-              <button onClick={() => setIsEncashModalOpen(false)} className="btn-close">
+              <h3 id="encash-modal-title" style={{ fontSize: '1.25rem' }}>Log Earned Leave Encashment</h3>
+              <button onClick={() => setIsEncashModalOpen(false)} className="btn-close" aria-label="Close dialog">
                 <X size={20} />
               </button>
             </div>
@@ -783,36 +743,19 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
 
-      {/* File Preview Modal */}
-      {previewPath && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.4)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 200,
-          backdropFilter: 'blur(4px)',
-          padding: '1.5rem'
-        }} className="no-print">
-          <div className="card animate-scale-in" style={{
-            width: '100%',
-            maxWidth: '800px',
-            maxHeight: '90vh',
-            backgroundColor: '#ffffff',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '1.5rem',
-            animation: 'popup-scale-in 0.05s ease-out'
-          }}>
+      {/* File Preview Modal (stacked above the leave modal since it can be opened from within it) */}
+      <Modal
+        isOpen={!!previewPath}
+        onClose={() => setPreviewPath(null)}
+        maxWidth="800px"
+        zIndex={200}
+        labelledBy="preview-modal-title"
+        className="card animate-scale-in"
+        overlayClassName="no-print"
+        dialogStyle={{ display: 'flex', flexDirection: 'column', animation: 'popup-scale-in 0.05s ease-out' }}
+      >
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -821,27 +764,27 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
               paddingBottom: '1rem',
               marginBottom: '1rem'
             }}>
-              <h3 style={{ fontSize: '1.25rem' }}>{previewTitle}</h3>
-              <button onClick={() => setPreviewPath(null)} className="btn-close">
+              <h3 id="preview-modal-title" style={{ fontSize: '1.25rem' }}>{previewTitle}</h3>
+              <button onClick={() => setPreviewPath(null)} className="btn-close" aria-label="Close dialog">
                 <X size={20} />
               </button>
             </div>
-            
+
             <div style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', padding: '1rem' }}>
-              {previewPath.toLowerCase().endsWith('.pdf') ? (
-                <iframe 
-                  src={previewPath} 
-                  style={{ width: '100%', height: '60vh', border: 'none', borderRadius: 'var(--radius-sm)' }} 
+              {previewPath && (previewPath.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={previewPath}
+                  style={{ width: '100%', height: '60vh', border: 'none', borderRadius: 'var(--radius-sm)' }}
                 />
               ) : (
-                <img 
-                  src={previewPath} 
-                  alt="Attachment Preview" 
-                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }} 
+                <img
+                  src={previewPath}
+                  alt="Attachment Preview"
+                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
                 />
-              )}
+              ))}
             </div>
-            
+
             <div style={{
               display: 'flex',
               justifyContent: 'flex-end',
@@ -850,8 +793,8 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
               borderTop: '1px solid var(--border)',
               paddingTop: '1rem'
             }}>
-              <a 
-                href={previewPath} 
+              <a
+                href={previewPath || '#'}
                 download
                 className="btn btn-secondary"
                 style={{ display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}
@@ -863,9 +806,7 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                 Close
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }
