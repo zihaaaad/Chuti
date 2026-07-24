@@ -58,6 +58,15 @@ npm run build
 npm run start-lan
 ```
 
+> [!WARNING]
+> **Updating Method B to a new version:** unlike the desktop app, this mode stores your database (`database.db`), uploads, and backups **directly inside this project folder**, not in a separate data folder you chose yourself. Before downloading a new version:
+> 1. Copy `database.db`, the `uploads/` folder, and the `backups/` folder somewhere safe (or just copy the whole project folder as a backup).
+> 2. Download or clone the new version into a **fresh, separate folder** — don't delete or overwrite your existing one.
+> 3. Copy your saved `database.db`, `uploads/`, and `backups/` into the new folder before running `start.bat` for the first time.
+> 4. Once you've confirmed the new version is running correctly with your data intact, it's safe to delete the old folder.
+>
+> Skipping this — for example, deleting the old folder and extracting a fresh download in its place — will start you with an empty database, since a fresh download never contains your `database.db`.
+
 ---
 
 ## Default Credentials
@@ -85,6 +94,9 @@ Chuti is built to work as a shared portal on your local network:
 
 ### Automatic Backups
 Chuti automatically creates a timestamped database backup in your data folder's `backups/` directory on every startup, rotating and keeping the last 30 backups to save disk space.
+
+### Restoring a Backup
+If something goes wrong — a bad import, an accidental deletion, or you just want to roll back to an earlier point in time — you don't need to touch any files by hand. Go to **Settings**, find the **Restore Backup** panel, and pick a backup from the list (each one is labeled with the date and time it was taken). Restoring automatically snapshots your *current* database first, so if you pick the wrong backup by mistake, that snapshot is sitting right there in the same list to restore back from.
 
 ### Migrating to a New PC
 Since the database file is completely self-contained, migrating to another computer is extremely simple:

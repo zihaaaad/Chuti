@@ -20,6 +20,9 @@ If you are running the system via the code files on Windows:
 2.  **Rebuilds & Updates:** If files are updated, select **Option 2** (Rebuild System) on startup. Otherwise, press **Enter** (Option 1) to launch immediately.
 3.  **Local Address:** The system will open your web browser automatically at `http://localhost:3000`.
 
+> [!TIP]
+> **Getting a *new version* of the code (not just Option 2's rebuild) is different from updating.** In this Network Launcher mode, your database, uploads, and backups live directly inside this project folder — there's no separate data folder like the desktop app uses. If you download a new copy of the project to update it, copy `database.db`, `uploads/`, and `backups/` out of your current folder first, put the new code in a *different* folder, and copy those three items into it before starting it up. If you delete your old folder and unpack a fresh download in its place without doing this, you will start with an empty database — a fresh download never includes your existing records.
+
 ---
 
 ## Office LAN Sharing (Accessing from other PCs)
@@ -40,9 +43,9 @@ You only need to install and run the application on **one host computer** (for e
 *   Change this immediately by navigating to **Console** -> **Settings** -> **Change Password**.
 
 ### Managing Employee Directories
-*   **Manual Entry:** Go to **Employees** -> **Add Employee**. Fill in their ID code, name, designation, joining date, and select their department.
+*   **Manual Entry:** Go to **Employees** -> **Add Employee**. Fill in their ID code, name, designation, joining date, and select their department. Phone number and email are optional contact fields.
 *   **Custom Quotas:** You can configure custom yearly quotas (Casual Leave, Sick Leave, Earned Leave) for each employee profile.
-*   **Bulk CSV Import:** To import many employees at once, click **Download Template CSV** on the Employees page, fill in the columns using Microsoft Excel or Google Sheets, and click **Upload Employees from CSV**.
+*   **Bulk CSV Import:** To import many employees at once, click **Download Template CSV** on the Employees page, fill in the columns using Microsoft Excel or Google Sheets, and click **Upload Employees from CSV**. The template has seven columns — EmployeeID, Name, Designation, Department, Phone, JoiningDate, and Email — where Email is optional and can be left blank. Older template files saved before Email was added (six columns) still import correctly.
 
 ### Recording Leaves
 1.  Go to **Leave Records** -> **Record A Leave**.
@@ -57,6 +60,7 @@ You only need to install and run the application on **one host computer** (for e
 *   **WAL Mode Safeguards:** Chuti runs the local SQLite database in WAL (Write-Ahead Logging) mode. This actively prevents database corruption even if the host computer shuts down suddenly due to a power outage.
 *   **Auto-Backups:** The app automatically backs up your database to the `backups/` directory inside your chosen data folder every time it starts up. The system retains the last **30 backups** and deletes older ones to save disk space.
 *   **Manual Backups:** You can copy the `database.db` file from your data folder to a secure cloud drive or external backup drive at any time.
+*   **Restoring a Backup:** Go to **Console** -> **Settings** -> **Restore Backup**. You'll see a list of your automatic backups, each labeled with the date and time it was created. Select one and confirm to restore it. Chuti automatically saves a snapshot of your current database right before the restore happens, so if you pick the wrong one, that snapshot is available in the same list to undo the restore.
 
 ---
 

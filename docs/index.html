@@ -938,7 +938,7 @@
   <div class="fade-in">
     <div class="hero-label">
       <div class="hero-label-dot"></div>
-      Version 1.0.0 — Windows 64-bit
+      Version <span id="version-text">1.0.2</span> — Windows 64-bit
     </div>
   </div>
   <h1 class="fade-in">Leave management,<br><span>done simply.</span></h1>
@@ -1165,7 +1165,7 @@
   <div class="cta-inner">
     <div class="version-badge">
       <div class="version-dot"></div>
-      Latest — v1.0.0
+      Latest — <span id="version-badge-text">v1.0.2</span>
     </div>
     <h2>Ready to get started?</h2>
     <p>Download Chuti for Windows. Free, forever. No account required.</p>
@@ -1209,6 +1209,32 @@
     </div>
   </div>
 </footer>
+
+<script>
+  // Keep the two version labels in sync with whatever GitHub says is actually
+  // latest, so this page can't silently drift out of date the way it did
+  // before (it sat on "v1.0.0" through the 1.0.1 and 1.0.2 releases because
+  // nothing updated it). The hardcoded text above is the fallback shown if
+  // this fetch fails (offline preview, GitHub API rate limit, etc.) — it's
+  // updated by hand at release time too, but is no longer the only thing
+  // visitors see.
+  (function () {
+    fetch('https://api.github.com/repos/zihaaaad/Chuti/releases/latest')
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data || !data.tag_name) return;
+        var tag = data.tag_name; // e.g. "v1.0.2"
+        var bare = tag.replace(/^v/, '');
+        var versionText = document.getElementById('version-text');
+        var versionBadgeText = document.getElementById('version-badge-text');
+        if (versionText) versionText.textContent = bare;
+        if (versionBadgeText) versionBadgeText.textContent = tag;
+      })
+      .catch(function () {
+        // Offline, blocked, or rate-limited — leave the static fallback text as-is.
+      });
+  })();
+</script>
 
 </body>
 </html>

@@ -38,7 +38,7 @@ If you've noticed a bug or have a feature request, please make sure to check our
   npx tsc --noEmit
   ```
 - Commit your changes with clear, descriptive commit messages.
-- Push to your fork and submit a Pull Request against the `main` branch.
+- Push to your fork and submit a Pull Request against the `master` branch.
 
 ## Pull Request Process
 
