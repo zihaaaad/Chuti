@@ -39,7 +39,32 @@ let dataDir     = null;
 let tray        = null;
 let isQuitting  = false;
 
-// ─── Logger ───────────────────────────────────────────────────────────────────
+// ─── Single-instance lock ──────────────────────────────────────────────────────
+// Without this, double-clicking the desktop shortcut twice (or running the
+// portable EXE alongside the installed version, pointed at the same data
+// folder) spawns two independent Next.js server processes that each open
+// their own SQLite connection and independently run the startup migration
+// sequence against the same database.db — a real risk of two processes
+// racing the DROP TABLE + RENAME steps in db.ts against each other.
+// requestSingleInstanceLock() ensures only the first launch actually starts
+// a server; any later launch attempt just focuses the first window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  // Another instance already owns the lock — hand off to it and exit
+  // immediately, before any server/window/config logic below runs.
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // Someone tried to launch a second copy — surface the existing window
+    // instead of letting a second server process start.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+
+  // ─── Logger ───────────────────────────────────────────────────────────────────
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   process.stdout.write(line);
@@ -510,3 +535,5 @@ ipcMain.handle('get-lan-url', () => `http://${getLanIP()}:${appPort}`);
 ipcMain.handle('get-data-dir', () => dataDir);
 ipcMain.handle('get-port',     () => appPort);
 ipcMain.handle('open-data-dir', () => shell.openPath(dataDir));
+
+} // end of `else` block guarded by gotSingleInstanceLock — see top of file

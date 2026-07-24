@@ -1,19 +1,58 @@
 name: Build & Release
 
+# Trigger semantics (important — this changed; see the two jobs below):
+#   - push to master  -> verification only. Installs deps, typechecks,
+#     lints, and runs `next build`. Confirms master isn't broken. Does NOT
+#     package an EXE or publish a release, so an untested/WIP commit can
+#     never become what users' "latest" download links serve.
+#   - push of a `v*` tag  -> full build + publish. This is how you cut an
+#     actual release: bump "version" in package.json, commit, then
+#     `git tag vX.Y.Z && git push origin vX.Y.Z` (or `--tags`).
+#   - workflow_dispatch  -> manual "build and publish anyway" escape hatch,
+#     runnable from the Actions tab without needing a tag.
 on:
   push:
     branches:
       - master
     tags:
-      - 'v*'          # Also trigger on version tags like v1.0.1
-  workflow_dispatch:  # Allow manual trigger from GitHub Actions UI
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write    # Needed to create GitHub Releases and upload assets
 
 jobs:
-  build:
-    name: Build Windows EXE
+  # ── Runs on every push to master: fast feedback that nothing is broken. ──────
+  verify:
+    name: Verify (typecheck, lint, build)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build Next.js (standalone)
+        run: npm run build
+
+  # ── Only runs for an actual version tag or a manual dispatch. ────────────────
+  release:
+    name: Build & Publish Windows EXE
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
     steps:
@@ -32,40 +71,55 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      # ── 4. Build Next.js standalone output ────────────────────────────────
+      # ── 4. Verify before packaging — a release build should never skip this ──
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      # ── 5. Build Next.js standalone output ────────────────────────────────
       - name: Build Next.js (standalone)
         run: npm run build
 
-      # ── 5. Determine release version ──────────────────────────────────────
-      - name: Get version from package.json
+      # ── 6. Determine release version ──────────────────────────────────────
+      # When triggered by a pushed tag, the tag itself is authoritative (avoids
+      # any chance of it disagreeing with package.json). workflow_dispatch has
+      # no tag to read, so it falls back to package.json's version.
+      - name: Determine release version
         id: pkg
         shell: pwsh
         run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF -replace 'refs/tags/v', ''
+            echo "Using version from pushed tag: $version"
+          } else {
+            $version = (Get-Content package.json | ConvertFrom-Json).version
+            echo "No tag on this run (workflow_dispatch) — using package.json version: $version"
+          }
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          echo "Building version: $version"
 
-      # ── 6. Generate icon.ico from icon.png (NSIS requires a real ICO) ──────
+      # ── 7. Generate icon.ico from icon.png (NSIS requires a real ICO) ──────
       - name: Generate icon.ico
         run: node scripts/generate-ico.js
 
-      # ── 7. Build Windows installer + portable EXE ─────────────────────────
+      # ── 8. Build Windows installer + portable EXE ─────────────────────────
       - name: Build Electron Windows EXE
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --x64 --publish never
 
-      # ── 7. List produced artifacts ────────────────────────────────────────
+      # ── 9. List produced artifacts ────────────────────────────────────────
       - name: List dist output
         shell: pwsh
         run: Get-ChildItem dist -Recurse -File | Select-Object FullName, Length
 
-      # ── 8. Rename and Copy artifacts for consistent download links ────────
+      # ── 10. Rename and Copy artifacts for consistent download links ────────
       - name: Rename and Copy artifacts
         shell: pwsh
         run: |
           $ver = "${{ steps.pkg.outputs.VERSION }}"
-          
+
           # Handle installer
           $setup = Get-ChildItem dist -Filter "*Setup*.exe" | Select-Object -First 1
           if ($setup) {
@@ -74,7 +128,7 @@ jobs:
             Rename-Item $setup.FullName "Chuti-Setup-$ver.exe"
             echo "Prepared assets: Chuti-Setup.exe and Chuti-Setup-$ver.exe"
           }
-          
+
           # Handle portable (exclude the newly copied Chuti-Setup.exe)
           $portable = Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notlike "*Setup*" -and $_.Name -notlike "Chuti-Setup.exe" } | Select-Object -First 1
           if ($portable) {
@@ -84,7 +138,7 @@ jobs:
             echo "Prepared assets: Chuti-Portable.exe and Chuti-Portable-$ver.exe"
           }
 
-      # ── 9. Upload as workflow artifacts (for manual download too) ─────────
+      # ── 11. Upload as workflow artifacts (for manual download too) ─────────
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -97,7 +151,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # ── 10. Create/update GitHub Release with the EXE files ───────────────
+      # ── 12. Create/update GitHub Release with the EXE files ───────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -118,6 +172,9 @@ jobs:
 
             ### First Launch
             On first launch, Chuti will ask you to choose a **data folder** where your database, backups, and uploaded files will be stored. This folder is yours — Chuti never deletes it.
+
+            ### Updating from an older version?
+            Chuti automatically backs up your database before running any migration, and you can restore any backup from **Settings → Restore Backup** if anything looks wrong after updating. Your data folder is never touched by installing a new version.
 
             ### System Requirements
             - Windows 10 / 11 (64-bit)

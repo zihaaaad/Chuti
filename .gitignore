@@ -46,6 +46,7 @@ database.db-journal
 database.db-wal
 database.db-shm
 /backups
+/pre_update_backups
 /public/uploads
 
 # Electron build output

@@ -68,6 +68,14 @@ if "%mode%"=="3" (
     call npm run dev-lan
 ) else if "%mode%"=="2" (
     echo.
+    if exist database.db (
+        echo [INFO] Backing up your current database before updating...
+        node -e "const fs=require('fs');const ts=new Date().toISOString().replace(/[:.]/g,'-');const dir='pre_update_backups';if(!fs.existsSync(dir))fs.mkdirSync(dir);const base='database_backup_'+ts+'.db';fs.copyFileSync('database.db',dir+'/'+base);['-wal','-shm'].forEach(function(ext){if(fs.existsSync('database.db'+ext))fs.copyFileSync('database.db'+ext,dir+'/'+base+ext);});console.log('[SUCCESS] Backup saved to '+dir+'/'+base);"
+        echo.
+    ) else (
+        echo [INFO] No existing database.db found — nothing to back up yet.
+        echo.
+    )
     echo [INFO] Rebuilding the system... This will take a few minutes.
     call npm run build
     echo.

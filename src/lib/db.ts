@@ -9,6 +9,12 @@ const dataDir = process.env.APP_DATA_DIR || process.cwd();
 const DB_PATH = path.join(dataDir, 'database.db');
 const BACKUP_DIR = path.join(dataDir, 'backups');
 
+// Bump this when a future migration needs a cheap "has this DB already been
+// migrated" check instead of probing column existence. Starting at 1 covers
+// every schema shape this file already knows how to migrate as of this
+// change — it does not itself represent a new migration.
+const CURRENT_SCHEMA_VERSION = 1;
+
 // We cache the in-flight initialization PROMISE, not just the resolved
 // instance. If we only cached the resolved instance, two requests that both
 // arrive before the first `getDb()` call finishes (very plausible on a cold
@@ -74,6 +80,29 @@ function backupDatabase() {
   }
 }
 
+// Same protective copy as backupDatabase(), but for the periodic 12-hourly
+// backup where a live connection is already open and may have writes
+// in-flight or sitting un-checkpointed in the WAL file. A plain copy of
+// database.db + database.db-wal + database.db-shm is only a complete,
+// consistent snapshot if nothing is actively writing between the three
+// copies; checkpointing first collapses the WAL into the main database file
+// so the copy of database.db alone is already a self-contained, correct
+// snapshot regardless of what happens to the (now-empty) WAL file after.
+// The startup call to backupDatabase() below doesn't need this: it runs
+// before we've opened our own connection, and the single-instance lock in
+// main.js means no other process should be writing to it at that moment.
+async function checkpointedBackup() {
+  try {
+    if (dbPromise) {
+      const db = await dbPromise;
+      await db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    }
+  } catch (err) {
+    console.error('Pre-backup WAL checkpoint failed, backing up as-is:', err);
+  }
+  backupDatabase();
+}
+
 // Exposes the resolved DB/backup paths so other modules (e.g. the restore-from-backup
 // action) can locate backup files without recomputing APP_DATA_DIR logic themselves.
 export function getPaths() {
@@ -123,7 +152,7 @@ async function initializeDb(): Promise<Database> {
   // restore-from-backup (which closes and reopens the connection, re-running
   // this function) doesn't stack up a new interval timer on every restore.
   if (!backupIntervalScheduled) {
-    setInterval(backupDatabase, 12 * 60 * 60 * 1000);
+    setInterval(checkpointedBackup, 12 * 60 * 60 * 1000);
     backupIntervalScheduled = true;
   }
 
@@ -330,6 +359,24 @@ async function initializeDb(): Promise<Database> {
     await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'Accounts');
     await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'IT');
   }
+
+  // Record the schema version this database has been migrated up to. The
+  // migrations above (department_id, nullable email, etc.) each detect
+  // whether they're needed by probing for a specific column/state, which
+  // works but means every future migration has to be individually proven
+  // safe against every possible prior schema shape. CURRENT_SCHEMA_VERSION
+  // gives future migrations a cheap, authoritative "have I already run"
+  // check instead: read this value, and only do the column-probing dance
+  // for versions between what's stored here and CURRENT_SCHEMA_VERSION.
+  // Existing databases (no row yet) are stamped at version 1, since every
+  // migration that predates this marker is already idempotent and safe to
+  // leave as-is — this does not change any existing migration's behavior.
+  await db.run(
+    `INSERT INTO system_settings (key, value) VALUES ('schema_version', ?)
+     ON CONFLICT(key) DO UPDATE SET value = ?
+     WHERE CAST(value AS INTEGER) < ?`,
+    [String(CURRENT_SCHEMA_VERSION), String(CURRENT_SCHEMA_VERSION), CURRENT_SCHEMA_VERSION]
+  );
 
   return db;
 }
