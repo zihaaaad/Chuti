@@ -2,6 +2,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
@@ -11,30 +13,88 @@ import bcrypt from 'bcryptjs';
 // HELPERS & SECURITY
 // ----------------------------------------------------
 
-// Global in-memory rate limiting for admin login
-let globalFailedAttempts = 0;
-let globalLockedUntil = 0;
+// Per-device in-memory rate limiting for admin login.
+//
+// This app is single-admin and explicitly designed to be shared over a LAN
+// (see README) — every coworker on the office Wi-Fi can reach the login
+// page. A single GLOBAL failure counter would let anyone on that network
+// lock out the real administrator just by typing the wrong password 10
+// times. Instead we key the lockout to an anonymous, non-authenticating
+// "client id" cookie issued to each browser, so one misbehaving device only
+// locks itself out. This isn't bulletproof (clearing cookies resets it,
+// there's no real cross-network-hop IP available on a plain `next start`
+// server), but it closes the trivial one-click DoS the global counter had.
+const CLIENT_ID_COOKIE = 'chuti_client_id';
 
-function checkRateLimit(): { allowed: boolean; waitTimeSeconds: number } {
+interface RateLimitEntry {
+  failedAttempts: number;
+  lockedUntil: number;
+  lastAttempt: number;
+}
+
+const rateLimitMap = new Map<string, RateLimitEntry>();
+const RATE_LIMIT_ENTRY_TTL_MS = 24 * 60 * 60 * 1000; // forget a device after 24h of inactivity
+const RATE_LIMIT_MAX_ENTRIES = 1000; // hard cap so the map can't grow unbounded
+
+// Periodically drop stale entries so long-running processes don't leak memory.
+function pruneRateLimitMap() {
   const now = Date.now();
-  if (globalLockedUntil > now) {
-    return { allowed: false, waitTimeSeconds: Math.ceil((globalLockedUntil - now) / 1000) };
+  for (const [key, entry] of rateLimitMap) {
+    if (now - entry.lastAttempt > RATE_LIMIT_ENTRY_TTL_MS) {
+      rateLimitMap.delete(key);
+    }
+  }
+  while (rateLimitMap.size > RATE_LIMIT_MAX_ENTRIES) {
+    const oldestKey = rateLimitMap.keys().next().value;
+    if (!oldestKey) break;
+    rateLimitMap.delete(oldestKey);
+  }
+}
+
+async function getOrCreateClientId(): Promise<string> {
+  const cookieStore = await cookies();
+  const existing = cookieStore.get(CLIENT_ID_COOKIE)?.value;
+  if (existing) return existing;
+
+  const id = crypto.randomBytes(16).toString('hex');
+  cookieStore.set(CLIENT_ID_COOKIE, id, {
+    httpOnly: true,
+    secure: process.env.APP_FORCE_HTTPS === 'true',
+    sameSite: 'strict',
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    path: '/'
+  });
+  return id;
+}
+
+function checkRateLimit(clientId: string): { allowed: boolean; waitTimeSeconds: number } {
+  const now = Date.now();
+  const entry = rateLimitMap.get(clientId);
+  if (entry && entry.lockedUntil > now) {
+    return { allowed: false, waitTimeSeconds: Math.ceil((entry.lockedUntil - now) / 1000) };
   }
   return { allowed: true, waitTimeSeconds: 0 };
 }
 
-function recordLoginAttempt(success: boolean) {
+function recordLoginAttempt(clientId: string, success: boolean) {
   const now = Date.now();
+  pruneRateLimitMap();
+
+  const entry = rateLimitMap.get(clientId) || { failedAttempts: 0, lockedUntil: 0, lastAttempt: now };
+  entry.lastAttempt = now;
+
   if (success) {
-    globalFailedAttempts = 0;
-    globalLockedUntil = 0;
+    entry.failedAttempts = 0;
+    entry.lockedUntil = 0;
   } else {
-    globalFailedAttempts += 1;
-    if (globalFailedAttempts >= 10) {
-      globalLockedUntil = now + 5 * 60 * 1000; // 5 minute global lock
-      globalFailedAttempts = 0; // Reset attempts after locking
+    entry.failedAttempts += 1;
+    if (entry.failedAttempts >= 10) {
+      entry.lockedUntil = now + 5 * 60 * 1000; // 5 minute lock for this device
+      entry.failedAttempts = 0; // Reset attempts after locking
     }
   }
+
+  rateLimitMap.set(clientId, entry);
 }
 
 // Helper to sanitize raw database error messages
@@ -44,6 +104,20 @@ function sanitizeError(err: any, defaultMsg: string): string {
     return defaultMsg;
   }
   return msg || defaultMsg;
+}
+
+// Leave/holiday date ranges are walked day-by-day (calculateLeaveDays,
+// hasOverlapConflict). Without an upper bound, a mistyped year (e.g.
+// 2026-01-01 to 2126-01-01) turns a simple form submit into a
+// multi-million-iteration loop on every future overlap check for that
+// employee. Cap ranges to something no real leave request would ever need.
+const MAX_LEAVE_SPAN_DAYS = 366;
+
+function exceedsMaxSpan(startDateStr: string, endDateStr: string): boolean {
+  const start = parseUTCDate(startDateStr);
+  const end = parseUTCDate(endDateStr);
+  const spanDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+  return spanDays > MAX_LEAVE_SPAN_DAYS;
 }
 
 // Input length validation helper
@@ -69,6 +143,12 @@ function isValidDateString(dateStr: string): boolean {
   if (day < 1 || day > daysInMonth) return false;
   
   return true;
+}
+
+// Basic, permissive email format check (email is an optional contact field,
+// not used for auth, so we don't need RFC-5322-grade strictness here).
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 // Helper to get local date in YYYY-MM-DD format
@@ -165,9 +245,11 @@ async function saveFile(file: File | null): Promise<string | null> {
 // 1. AUTHENTICATION ACTIONS
 // ----------------------------------------------------
 export async function handleLogin(prevState: any, formData: FormData) {
-  const rateCheck = checkRateLimit();
+  const clientId = await getOrCreateClientId();
+
+  const rateCheck = checkRateLimit(clientId);
   if (!rateCheck.allowed) {
-    return { success: false, error: `Too many login failures. Locked out. Please try again in ${rateCheck.waitTimeSeconds} seconds.` };
+    return { success: false, error: `Too many login failures from this device. Locked out. Please try again in ${rateCheck.waitTimeSeconds} seconds.` };
   }
 
   const password = formData.get('password') as string;
@@ -178,9 +260,9 @@ export async function handleLogin(prevState: any, formData: FormData) {
   if (!validateLength(password, 100)) {
     return { success: false, error: 'Password is too long.' };
   }
-  
+
   const ok = await loginAdmin(password);
-  recordLoginAttempt(ok);
+  recordLoginAttempt(clientId, ok);
 
   if (ok) {
     return { success: true };
@@ -202,13 +284,16 @@ export async function addEmployee(formData: FormData) {
     return { success: false, error: 'Unauthorized' };
   }
 
-  const employee_id = formData.get('employee_id') as string;
-  const name = formData.get('name') as string;
-  const designation = formData.get('designation') as string;
-  const department = formData.get('department') as string;
+  // Trim free-text fields so whitespace-only differences can't create
+  // visually-duplicate employees/departments or dodge exact-match checks.
+  const employee_id = (formData.get('employee_id') as string || '').trim();
+  const name = (formData.get('name') as string || '').trim();
+  const designation = (formData.get('designation') as string || '').trim();
+  const department = (formData.get('department') as string || '').trim();
   const joining_date = formData.get('joining_date') as string;
-  const phone = formData.get('phone') as string;
-  
+  const phone = (formData.get('phone') as string || '').trim();
+  const email = (formData.get('email') as string || '').trim() || null;
+
   // Custom leave allocations
   let cl_allocated = parseFloat(formData.get('cl_allocated') as string);
   if (isNaN(cl_allocated) || cl_allocated < 0) cl_allocated = 10;
@@ -227,7 +312,8 @@ export async function addEmployee(formData: FormData) {
       !validateLength(name, 100) ||
       !validateLength(designation, 100) ||
       !validateLength(department, 100) ||
-      !validateLength(phone, 20)) {
+      !validateLength(phone, 20) ||
+      !validateLength(email, 254)) {
     return { success: false, error: 'Input fields exceed length limits.' };
   }
 
@@ -235,13 +321,25 @@ export async function addEmployee(formData: FormData) {
     return { success: false, error: 'Invalid joining date format or value. Please use YYYY-MM-DD.' };
   }
 
+  if (email && !isValidEmail(email)) {
+    return { success: false, error: 'Please enter a valid email address, or leave it blank.' };
+  }
+
   try {
     const db = await getDb();
-    
+
     // Check duplicate employee_id
     const existing = await db.get('SELECT id FROM employees WHERE employee_id = ?', employee_id);
     if (existing) {
       return { success: false, error: 'Employee ID already exists.' };
+    }
+
+    // Check duplicate email (NULLs are exempt — many employees can have no email on file)
+    if (email) {
+      const existingEmail = await db.get('SELECT id FROM employees WHERE email = ?', email);
+      if (existingEmail) {
+        return { success: false, error: 'This email address is already in use by another employee.' };
+      }
     }
 
     await db.run('BEGIN IMMEDIATE');
@@ -254,9 +352,9 @@ export async function addEmployee(formData: FormData) {
 
     // Insert employee
     const result = await db.run(
-      `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [employee_id, name, designation, dept.id, joining_date, phone]
+      `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone, email)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [employee_id, name, designation, dept.id, joining_date, phone, email]
     );
 
     const empId = result.lastID;
@@ -288,13 +386,14 @@ export async function updateEmployee(formData: FormData) {
   }
 
   const id = parseInt(formData.get('id') as string);
-  const employee_id = formData.get('employee_id') as string;
-  const name = formData.get('name') as string;
-  const designation = formData.get('designation') as string;
-  const department = formData.get('department') as string;
+  const employee_id = (formData.get('employee_id') as string || '').trim();
+  const name = (formData.get('name') as string || '').trim();
+  const designation = (formData.get('designation') as string || '').trim();
+  const department = (formData.get('department') as string || '').trim();
   const joining_date = formData.get('joining_date') as string;
-  const phone = formData.get('phone') as string;
+  const phone = (formData.get('phone') as string || '').trim();
   const status = formData.get('status') as string;
+  const email = (formData.get('email') as string || '').trim() || null;
 
   let cl_allocated = parseFloat(formData.get('cl_allocated') as string);
   if (isNaN(cl_allocated) || cl_allocated < 0) cl_allocated = 10;
@@ -314,12 +413,17 @@ export async function updateEmployee(formData: FormData) {
       !validateLength(designation, 100) ||
       !validateLength(department, 100) ||
       !validateLength(phone, 20) ||
-      !validateLength(status, 20)) {
+      !validateLength(status, 20) ||
+      !validateLength(email, 254)) {
     return { success: false, error: 'Input fields exceed length limits.' };
   }
 
   if (!isValidDateString(joining_date)) {
     return { success: false, error: 'Invalid joining date format or value. Please use YYYY-MM-DD.' };
+  }
+
+  if (email && !isValidEmail(email)) {
+    return { success: false, error: 'Please enter a valid email address, or leave it blank.' };
   }
 
   try {
@@ -331,6 +435,14 @@ export async function updateEmployee(formData: FormData) {
       return { success: false, error: 'Employee ID already exists for another employee.' };
     }
 
+    // Check duplicate email on other employees
+    if (email) {
+      const existingEmail = await db.get('SELECT id FROM employees WHERE email = ? AND id != ?', [email, id]);
+      if (existingEmail) {
+        return { success: false, error: 'This email address is already in use by another employee.' };
+      }
+    }
+
     await db.run('BEGIN IMMEDIATE');
 
     let dept = await db.get('SELECT id FROM departments WHERE name = ?', department);
@@ -340,17 +452,32 @@ export async function updateEmployee(formData: FormData) {
     }
 
     await db.run(
-      `UPDATE employees 
-       SET employee_id = ?, name = ?, designation = ?, department_id = ?, join_date = ?, phone = ?, status = ?
+      `UPDATE employees
+       SET employee_id = ?, name = ?, designation = ?, department_id = ?, join_date = ?, phone = ?, status = ?, email = ?
        WHERE id = ?`,
-      [employee_id, name, designation, dept.id, joining_date, phone, status, id]
+      [employee_id, name, designation, dept.id, joining_date, phone, status, email, id]
     );
 
-    // Update allocations
-    await db.run('UPDATE leave_balances SET allocated_days = ? WHERE employee_id = ? AND leave_type = ?', [cl_allocated, id, 'Casual']);
-    await db.run('UPDATE leave_balances SET allocated_days = ? WHERE employee_id = ? AND leave_type = ?', [sl_allocated, id, 'Sick']);
-    await db.run('UPDATE leave_balances SET allocated_days = ? WHERE employee_id = ? AND leave_type = ?', [el_allocated, id, 'Earned']);
-    await db.run('UPDATE leave_balances SET allocated_days = ? WHERE employee_id = ? AND leave_type = ?', [ml_allocated, id, 'Maternity']);
+    // Update allocations. Uses INSERT ... ON CONFLICT instead of a plain
+    // UPDATE so that a missing balance row (e.g. an employee created before
+    // a leave type existed, or restored from a partial import) gets created
+    // rather than the update silently affecting 0 rows and the quota never
+    // being set.
+    const upsertBalance = `
+      INSERT INTO leave_balances (employee_id, leave_type, allocated_days)
+      VALUES (?, ?, ?)
+      ON CONFLICT(employee_id, leave_type) DO UPDATE SET allocated_days = excluded.allocated_days`;
+    await db.run(upsertBalance, [id, 'Casual', cl_allocated]);
+    await db.run(upsertBalance, [id, 'Sick', sl_allocated]);
+    await db.run(upsertBalance, [id, 'Earned', el_allocated]);
+    await db.run(upsertBalance, [id, 'Maternity', ml_allocated]);
+    // Ensure LWP balance also exists for employees created before this row was seeded.
+    await db.run(
+      `INSERT INTO leave_balances (employee_id, leave_type, allocated_days)
+       VALUES (?, 'LWP', 9999.0)
+       ON CONFLICT(employee_id, leave_type) DO NOTHING`,
+      [id]
+    );
 
     await db.run('COMMIT');
     revalidatePath('/dashboard/employees');
@@ -415,6 +542,12 @@ export async function calculateLeaveDays(
   const end = parseUTCDate(endDateStr);
   
   if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+    return 0;
+  }
+
+  // Defensive guard: callers should already reject overly large ranges
+  // (see exceedsMaxSpan), but never day-by-day-loop over an unbounded range.
+  if (exceedsMaxSpan(startDateStr, endDateStr)) {
     return 0;
   }
 
@@ -513,6 +646,10 @@ export async function addLeaveRecord(formData: FormData) {
     return { success: false, error: 'Start date cannot be after end date.' };
   }
 
+  if (exceedsMaxSpan(start_date, end_date)) {
+    return { success: false, error: `Leave date range is too large. Please limit requests to ${MAX_LEAVE_SPAN_DAYS} days or fewer.` };
+  }
+
   if (file && file.size > 10 * 1024 * 1024) {
     return { success: false, error: 'File upload size exceeds the 10MB limit.' };
   }
@@ -521,7 +658,7 @@ export async function addLeaveRecord(formData: FormData) {
 
   try {
     const db = await getDb();
-    
+
     // Check if employee exists and is active
     const employee = await db.get('SELECT name, status FROM employees WHERE id = ?', employee_id);
     if (!employee) {
@@ -543,11 +680,15 @@ export async function addLeaveRecord(formData: FormData) {
     await db.run('BEGIN IMMEDIATE');
 
     // Check if employee already has overlapping leave records (inside transaction to prevent race conditions)
+    // Encashment log entries ('Earned (Encashed)') are bookkeeping rows, not
+    // actual absences, so they must never block a real leave from being
+    // recorded on the same date.
     const overlappingRecords = await db.all(
-      `SELECT id, start_date, end_date, actual_days FROM leave_records 
-       WHERE employee_id = ? 
-         AND start_date <= ? 
-         AND end_date >= ?`,
+      `SELECT id, start_date, end_date, actual_days FROM leave_records
+       WHERE employee_id = ?
+         AND start_date <= ?
+         AND end_date >= ?
+         AND leave_type != 'Earned (Encashed)'`,
       [employee_id, end_date, start_date]
     );
 
@@ -700,6 +841,10 @@ export async function updateLeaveRecord(formData: FormData) {
     return { success: false, error: 'Start date cannot be after end date.' };
   }
 
+  if (exceedsMaxSpan(start_date, end_date)) {
+    return { success: false, error: `Leave date range is too large. Please limit requests to ${MAX_LEAVE_SPAN_DAYS} days or fewer.` };
+  }
+
   if (file && file.size > 10 * 1024 * 1024) {
     return { success: false, error: 'File upload size exceeds the 10MB limit.' };
   }
@@ -749,12 +894,14 @@ export async function updateLeaveRecord(formData: FormData) {
       );
     }
 
-    // 2. Check overlap (excluding this leave record itself)
+    // 2. Check overlap (excluding this leave record itself, and excluding
+    // encashment bookkeeping rows — see note in addLeaveRecord above)
     const overlappingRecords = await db.all(
-      `SELECT id, start_date, end_date, actual_days FROM leave_records 
-       WHERE employee_id = ? 
-         AND start_date <= ? 
-         AND end_date >= ?`,
+      `SELECT id, start_date, end_date, actual_days FROM leave_records
+       WHERE employee_id = ?
+         AND start_date <= ?
+         AND end_date >= ?
+         AND leave_type != 'Earned (Encashed)'`,
       [employee_id, end_date, start_date]
     );
 
@@ -1004,7 +1151,11 @@ export async function updateSystemSettings(formData: FormData) {
   
   const new_password = formData.get('new_password') as string;
 
-  if (!institute_name || !weekend_days || !sandwich_rule || !late_cl_threshold) {
+  // Note: weekend_days is intentionally allowed to be an empty string — an
+  // organisation may legitimately run a 7-day work week with no fixed
+  // weekly off-day. We only require the field to have been submitted at
+  // all (i.e. not missing from the form), not that it be non-empty.
+  if (!institute_name || typeof weekend_days !== 'string' || !sandwich_rule || !late_cl_threshold) {
     return { success: false, error: 'All configurations must be filled.' };
   }
 
@@ -1073,7 +1224,7 @@ export async function addHoliday(formData: FormData) {
     return { success: false, error: 'Unauthorized' };
   }
 
-  const title = formData.get('title') as string;
+  const title = (formData.get('title') as string || '').trim();
   const start_date = formData.get('start_date') as string;
   const end_date = formData.get('end_date') as string;
 
@@ -1087,6 +1238,10 @@ export async function addHoliday(formData: FormData) {
 
   if (!isValidDateString(start_date) || !isValidDateString(end_date)) {
     return { success: false, error: 'Invalid start or end date format. Please use YYYY-MM-DD.' };
+  }
+
+  if (parseUTCDate(start_date) > parseUTCDate(end_date)) {
+    return { success: false, error: 'Start date cannot be after end date.' };
   }
 
   try {
@@ -1214,6 +1369,9 @@ export async function importEmployeesFromCSV(formData: FormData) {
       const department = columns[3];
       const phone = columns[4] || '';
       let joining_date = columns[5];
+      // Email is an optional 7th column, added after the original template
+      // shipped — old 6-column CSV files remain fully compatible.
+      let email: string | null = (columns[6] || '').trim() || null;
 
       if (!employee_id || !name || !designation || !department) continue;
 
@@ -1221,12 +1379,25 @@ export async function importEmployeesFromCSV(formData: FormData) {
           !validateLength(name, 100) ||
           !validateLength(designation, 100) ||
           !validateLength(department, 100) ||
-          !validateLength(phone, 20)) {
+          !validateLength(phone, 20) ||
+          !validateLength(email, 254)) {
         continue;
       }
 
       if (!isValidDateString(joining_date)) {
         joining_date = getLocalTodayStr();
+      }
+
+      // Don't fail the whole row over a bad/duplicate email — just drop it,
+      // consistent with how an invalid joining date falls back to today
+      // instead of rejecting the row.
+      if (email) {
+        if (!isValidEmail(email)) {
+          email = null;
+        } else {
+          const existingEmail = await db.get('SELECT id FROM employees WHERE email = ?', email);
+          if (existingEmail) email = null;
+        }
       }
 
       // Ensure department exists in departments table
@@ -1241,9 +1412,9 @@ export async function importEmployeesFromCSV(formData: FormData) {
       }
 
       const result = await db.run(
-        `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [employee_id, name, designation, deptId, joining_date, phone]
+        `INSERT INTO employees (employee_id, name, designation, department_id, join_date, phone, email)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [employee_id, name, designation, deptId, joining_date, phone, email]
       );
 
       const empId = result.lastID;

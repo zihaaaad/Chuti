@@ -22,6 +22,7 @@ interface Employee {
   department: string;
   joining_date: string;
   phone: string;
+  email: string | null;
   status: string;
   balances: Balance[];
 }
@@ -56,6 +57,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
   const [department, setDepartment] = useState('');
   const [joiningDate, setJoiningDate] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [status, setStatus] = useState('Active');
   
   // Allocation adjustments
@@ -74,7 +76,9 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
       emp.name.toLowerCase().includes(q) ||
       emp.employee_id.toLowerCase().includes(q) ||
       emp.designation.toLowerCase().includes(q) ||
-      emp.department.toLowerCase().includes(q)
+      emp.department.toLowerCase().includes(q) ||
+      (emp.phone && emp.phone.toLowerCase().includes(q)) ||
+      (emp.email && emp.email.toLowerCase().includes(q))
     );
   });
 
@@ -86,6 +90,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
     setDepartment(departments[0]?.name || 'Administration');
     setJoiningDate(new Date().toISOString().split('T')[0]);
     setPhone('');
+    setEmail('');
     setStatus('Active');
     setClAllocated('10');
     setSlAllocated('14');
@@ -103,6 +108,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
     setDepartment(emp.department);
     setJoiningDate(emp.joining_date);
     setPhone(emp.phone || '');
+    setEmail(emp.email || '');
     setStatus(emp.status);
     
     const cl = emp.balances.find(b => b.type === 'Casual')?.allocated || 10;
@@ -135,6 +141,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
     formData.append('department', department);
     formData.append('joining_date', joiningDate);
     formData.append('phone', phone);
+    formData.append('email', email);
     formData.append('status', status);
     formData.append('cl_allocated', clAllocated);
     formData.append('sl_allocated', slAllocated);
@@ -269,9 +276,11 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
           </h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
             Ensure your CSV file contains columns in this order: <br />
-            <strong>EmployeeID, Name, Designation, Department, Phone, JoiningDate (YYYY-MM-DD)</strong>
+            <strong>EmployeeID, Name, Designation, Department, Phone, JoiningDate (YYYY-MM-DD), Email (optional)</strong>
             <br />
-            <em>Example: EMP-001, Kamal Hossain, Lecturer, Administration, 01711000000, 2026-01-01</em>
+            <em>Example: EMP-001, Kamal Hossain, Lecturer, Administration, 01711000000, 2026-01-01, kamal@example.com</em>
+            <br />
+            Older 6-column template files (without Email) still work fine.
           </p>
 
           <div style={{ marginBottom: '1.25rem' }}>
@@ -339,6 +348,7 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
                     <td>
                       <div style={{ fontWeight: '600' }}>{emp.name}</div>
                       {emp.phone && <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>{emp.phone}</div>}
+                      {emp.email && <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>{emp.email}</div>}
                     </td>
                     <td>{emp.designation}</td>
                     <td>{emp.department}</td>
@@ -523,15 +533,28 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="emp-phone">Phone Number</label>
-                  <input 
-                    className="form-control" 
-                    type="tel" 
-                    id="emp-phone" 
+                  <input
+                    className="form-control"
+                    type="tel"
+                    id="emp-phone"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     disabled={isPending}
                   />
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="emp-email">Email (optional)</label>
+                <input
+                  className="form-control"
+                  type="email"
+                  id="emp-email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isPending}
+                />
               </div>
 
               {editingEmployee && (

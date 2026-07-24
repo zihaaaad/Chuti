@@ -120,6 +120,7 @@ export default function ReportsClient({
         clCount,
         slCount,
         elCount,
+        mlCount,
         lwpCount,
         totalLeaves,
         lateCount,
@@ -140,9 +141,9 @@ export default function ReportsClient({
         csvContent += `"${rec.emp_code}","${rec.name}","${rec.department}","${rec.leave_type}","${rec.start_date}","${rec.end_date}",${rec.actual_days},"${rec.reason.replace(/"/g, '""')}","${(rec.remarks || '').replace(/"/g, '""')}","${rec.recorded_at}"\n`;
       });
     } else {
-      csvContent += 'Employee ID,Name,Department,Casual Leave,Sick Leave,Earned Leave,LWP (Unpaid),Total Leaves,Late Count,Deducted CL,Net Paid Days/Payable Days\n';
+      csvContent += 'Employee ID,Name,Department,Casual Leave,Sick Leave,Earned Leave,Maternity Leave,LWP (Unpaid),Total Leaves,Late Count,Deducted CL,Net Paid Days/Payable Days\n';
       compiledPayroll.forEach(row => {
-        csvContent += `"${row.code}","${row.name}","${row.department}",${row.clCount},${row.slCount},${row.elCount},${row.lwpCount},${row.totalLeaves},${row.lateCount},${row.deductedCL},${row.netPaidDays}/${row.totalMonthDays}\n`;
+        csvContent += `"${row.code}","${row.name}","${row.department}",${row.clCount},${row.slCount},${row.elCount},${row.mlCount},${row.lwpCount},${row.totalLeaves},${row.lateCount},${row.deductedCL},${row.netPaidDays}/${row.totalMonthDays}\n`;
       });
     }
 
@@ -372,6 +373,7 @@ export default function ReportsClient({
                   <th>Casual (CL)</th>
                   <th>Sick (SL)</th>
                   <th>Earned (EL)</th>
+                  <th>Maternity (ML)</th>
                   <th>LWP (Unpaid)</th>
                   <th>Total Leaves</th>
                   <th>Late Count</th>
@@ -382,7 +384,7 @@ export default function ReportsClient({
               <tbody>
                 {compiledPayroll.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', color: 'var(--foreground-muted)', padding: '2rem' }}>
+                    <td colSpan={12} style={{ textAlign: 'center', color: 'var(--foreground-muted)', padding: '2rem' }}>
                       No active records for this selection. All employees have 100% attendance.
                     </td>
                   </tr>
@@ -395,7 +397,8 @@ export default function ReportsClient({
                       <td style={{ fontWeight: row.clCount > 0 ? 600 : 400 }}>{row.clCount} days</td>
                       <td style={{ fontWeight: row.slCount > 0 ? 600 : 400 }}>{row.slCount} days</td>
                       <td style={{ fontWeight: row.elCount > 0 ? 600 : 400 }}>{row.elCount} days</td>
-                      <td style={{ 
+                      <td style={{ fontWeight: row.mlCount > 0 ? 600 : 400 }}>{row.mlCount} days</td>
+                      <td style={{
                         fontWeight: row.lwpCount > 0 ? 600 : 400,
                         color: row.lwpCount > 0 ? 'var(--error)' : 'inherit'
                       }}>{row.lwpCount} days</td>

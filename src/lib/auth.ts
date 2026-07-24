@@ -44,11 +44,17 @@ export async function loginAdmin(password: string): Promise<boolean> {
   // Store session in database
   await db.run('INSERT INTO admin_sessions (session_id) VALUES (?)', sessionValue);
   
-  // Set secure cookie
+  // Set session cookie.
+  // NOTE: This app is designed to be served over plain HTTP — either on
+  // localhost or over a LAN IP (http://192.168.x.x:3000) — with no TLS
+  // termination in front of it. A cookie flagged `Secure` is silently
+  // dropped by browsers on any non-HTTPS origin other than localhost,
+  // which would break login for every LAN user. Only set `Secure` if the
+  // deployer explicitly tells us we're behind HTTPS (e.g. a reverse proxy).
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, sessionValue, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.APP_FORCE_HTTPS === 'true',
     sameSite: 'strict',
     maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/'

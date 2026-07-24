@@ -9,7 +9,7 @@ export default async function EmployeesPage() {
 
   // 2. Fetch all employees
   const employeesRaw = await db.all(`
-    SELECT e.id, e.employee_id, e.name, e.designation, d.name as department, e.join_date as joining_date, e.phone, e.status
+    SELECT e.id, e.employee_id, e.name, e.designation, d.name as department, e.join_date as joining_date, e.phone, e.email, e.status
     FROM employees e
     LEFT JOIN departments d ON e.department_id = d.id
     ORDER BY e.employee_id ASC

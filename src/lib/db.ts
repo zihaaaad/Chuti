@@ -9,7 +9,15 @@ const dataDir = process.env.APP_DATA_DIR || process.cwd();
 const DB_PATH = path.join(dataDir, 'database.db');
 const BACKUP_DIR = path.join(dataDir, 'backups');
 
-let dbInstance: Database | null = null;
+// We cache the in-flight initialization PROMISE, not just the resolved
+// instance. If we only cached the resolved instance, two requests that both
+// arrive before the first `getDb()` call finishes (very plausible on a cold
+// start — Next.js can render a layout and page concurrently, and this app is
+// explicitly designed for multiple simultaneous LAN users) would each see a
+// null instance and independently re-run the full schema/migration sequence,
+// including destructive DROP TABLE + RENAME steps. Caching the promise
+// ensures the expensive init logic below only ever runs once per process.
+let dbPromise: Promise<Database> | null = null;
 
 // Clean up old backups keeping only the last 30
 function rotateBackups() {
@@ -67,17 +75,24 @@ function backupDatabase() {
 }
 
 export async function getDb(): Promise<Database> {
-  if (dbInstance) {
-    return dbInstance;
+  if (!dbPromise) {
+    // Assign synchronously (before any `await`) so concurrent callers see the
+    // same in-flight promise instead of each starting their own init.
+    dbPromise = initializeDb().catch((err) => {
+      // If init fails, clear the cached promise so a later call can retry
+      // instead of every future getDb() call rejecting forever.
+      dbPromise = null;
+      throw err;
+    });
   }
+  return dbPromise;
+}
 
-  // Backup the database on startup before opening the connection (run only once per process)
-  if (!(global as any).backupPerformed) {
-    backupDatabase();
-    // Schedule periodic backup every 12 hours (43200000 ms)
-    setInterval(backupDatabase, 12 * 60 * 60 * 1000);
-    (global as any).backupPerformed = true;
-  }
+async function initializeDb(): Promise<Database> {
+  // Backup the database on startup before opening the connection.
+  backupDatabase();
+  // Schedule periodic backup every 12 hours (43200000 ms)
+  setInterval(backupDatabase, 12 * 60 * 60 * 1000);
 
   // Open the database
   const db = await open({
@@ -283,6 +298,5 @@ export async function getDb(): Promise<Database> {
     await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'IT');
   }
 
-  dbInstance = db;
-  return dbInstance;
+  return db;
 }
