@@ -74,6 +74,32 @@ function backupDatabase() {
   }
 }
 
+// Exposes the resolved DB/backup paths so other modules (e.g. the restore-from-backup
+// action) can locate backup files without recomputing APP_DATA_DIR logic themselves.
+export function getPaths() {
+  return { DB_PATH, BACKUP_DIR };
+}
+
+// Closes the live connection so its file can be safely overwritten (used by restore-from-backup).
+// The next getDb() call transparently reopens at DB_PATH.
+//
+// NOTE: this awaits `dbPromise` itself (not a separate `dbInstance` variable —
+// see the promise-caching comment above `dbPromise`) so it correctly waits out
+// an in-flight initialization instead of racing it, and always clears the
+// cached promise afterwards so the next getDb() call reopens fresh rather than
+// returning a promise that already resolved to a now-closed connection.
+export async function closeDb(): Promise<void> {
+  if (!dbPromise) return;
+  const pending = dbPromise;
+  dbPromise = null;
+  try {
+    const db = await pending;
+    await db.close();
+  } catch {
+    // Initialization never succeeded, so there's no open connection to close.
+  }
+}
+
 export async function getDb(): Promise<Database> {
   if (!dbPromise) {
     // Assign synchronously (before any `await`) so concurrent callers see the
@@ -88,11 +114,18 @@ export async function getDb(): Promise<Database> {
   return dbPromise;
 }
 
+let backupIntervalScheduled = false;
+
 async function initializeDb(): Promise<Database> {
   // Backup the database on startup before opening the connection.
   backupDatabase();
-  // Schedule periodic backup every 12 hours (43200000 ms)
-  setInterval(backupDatabase, 12 * 60 * 60 * 1000);
+  // Schedule periodic backup every 12 hours (43200000 ms). Guarded so that a
+  // restore-from-backup (which closes and reopens the connection, re-running
+  // this function) doesn't stack up a new interval timer on every restore.
+  if (!backupIntervalScheduled) {
+    setInterval(backupDatabase, 12 * 60 * 60 * 1000);
+    backupIntervalScheduled = true;
+  }
 
   // Open the database
   const db = await open({

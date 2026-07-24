@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
+import { isAuthenticated } from '@/lib/auth';
 
 // This API route serves uploaded files from the user-selected APP_DATA_DIR.
 // It replaces the old approach of storing files in /public/uploads, which
@@ -9,6 +10,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ filename: string }> }
 ) {
+  // Attachments are leave-request evidence (sick notes, IDs, etc.) — require the same
+  // admin session the rest of the dashboard requires, so they aren't world-readable to
+  // anyone who can reach this port on the LAN.
+  if (!(await isAuthenticated())) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
   const { filename } = await params;
 
   // Sanitize filename to prevent directory traversal attacks

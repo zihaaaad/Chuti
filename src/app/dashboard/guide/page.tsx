@@ -24,7 +24,7 @@ export default function GuidePage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '2rem', alignItems: 'start' }}>
+      <div className="guide-layout-grid">
         {/* Left: Tab selectors */}
         <div className="card animate-scale-in" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', animation: 'popup-scale-in 0.05s ease-out' }}>
           {tabs.map(tab => {
