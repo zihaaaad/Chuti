@@ -12,7 +12,8 @@ $textBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
 $format = New-Object System.Drawing.StringFormat
 $format.Alignment = [System.Drawing.StringAlignment]::Center
 $format.LineAlignment = [System.Drawing.StringAlignment]::Center
-$g.DrawString("C", $font, $textBrush, $rect, $format)
+$rectF = New-Object System.Drawing.RectangleF(0, 0, 256, 256)
+$g.DrawString("C", $font, $textBrush, $rectF, $format)
 $bmp.Save("E:\Development\Chuti\public\icon.png", [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose()
 $bmp.Dispose()
