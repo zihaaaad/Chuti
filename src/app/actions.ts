@@ -692,7 +692,12 @@ export async function addLeaveRecord(formData: FormData) {
     }
 
     // Save attachment (do this outside of the transaction since filesystem operations are slow)
-    newSavedFile = await saveFile(file);
+    if (file && file.size > 0) {
+      newSavedFile = await saveFile(file);
+      if (!newSavedFile) {
+        return { success: false, error: 'Failed to save attachment to server disk.' };
+      }
+    }
 
     await db.run('BEGIN IMMEDIATE');
 
@@ -967,12 +972,15 @@ export async function updateLeaveRecord(formData: FormData) {
     }
 
     if (file && file.size > 0) {
-      // Replaced old file
+      // Save new file first
+      newSavedFile = await saveFile(file);
+      if (!newSavedFile) {
+        return { success: false, error: 'Failed to save new attachment to server disk.' };
+      }
+      // Only mark old file for deletion if new file saved successfully
       if (oldRecord.attachment_path) {
         filesToDelete.push(oldRecord.attachment_path);
       }
-      // Save new file
-      newSavedFile = await saveFile(file);
       attachmentPath = newSavedFile;
     }
 
@@ -1570,8 +1578,10 @@ export async function restoreBackup(filename: string) {
     // Safety net: snapshot the current live database before overwriting it, in case the
     // chosen backup turns out to be the wrong one.
     if (fs.existsSync(DB_PATH)) {
-      const preRestoreName = `database_backup_prerestore_${Date.now()}.db`;
-      fs.copyFileSync(DB_PATH, path.join(BACKUP_DIR, preRestoreName));
+      const preRestoreName = `database_backup_prerestore_${Date.now()}`;
+      fs.copyFileSync(DB_PATH, path.join(BACKUP_DIR, preRestoreName + '.db'));
+      if (fs.existsSync(DB_PATH + '-wal')) fs.copyFileSync(DB_PATH + '-wal', path.join(BACKUP_DIR, preRestoreName + '.db-wal'));
+      if (fs.existsSync(DB_PATH + '-shm')) fs.copyFileSync(DB_PATH + '-shm', path.join(BACKUP_DIR, preRestoreName + '.db-shm'));
     }
 
     // Close the live connection so nothing races the file swap, then clear the *current*
