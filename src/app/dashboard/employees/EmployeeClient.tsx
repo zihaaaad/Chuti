@@ -332,8 +332,11 @@ export default function EmployeeClient({ initialEmployees, departments }: Employ
           <tbody>
             {filteredEmployees.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--foreground-muted)', padding: '2rem' }}>
-                  No employees found.
+                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--foreground-muted)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                    <Search size={32} style={{ opacity: 0.5 }} />
+                    <span style={{ fontSize: '0.875rem' }}>No employees found matching your search.</span>
+                  </div>
                 </td>
               </tr>
             ) : (

@@ -100,7 +100,8 @@ export default function Modal({
         alignItems: 'center',
         zIndex,
         backdropFilter: 'blur(2px)',
-        padding: '1rem'
+        padding: '1rem',
+        animation: 'fade-in 0.15s ease-out'
       }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -121,6 +122,7 @@ export default function Modal({
           backgroundColor: '#ffffff',
           boxShadow: 'var(--shadow-lg)',
           border: '1px solid var(--border)',
+          animation: 'popup-scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
           ...dialogStyle
         }}
       >

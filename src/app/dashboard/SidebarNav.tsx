@@ -41,7 +41,7 @@ export default function SidebarNav() {
               backgroundColor: isActive ? 'var(--primary-light)' : 'transparent',
               borderLeft: isActive ? '3px solid var(--primary-accent)' : '3px solid transparent',
               paddingLeft: isActive ? 'calc(0.75rem - 3px)' : '0.75rem', // Offset padding to align content
-              transition: 'all 0.05s ease'
+              transition: 'all 0.15s ease-out'
             }} 
             className="nav-link"
           >

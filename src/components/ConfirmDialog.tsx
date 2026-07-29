@@ -29,6 +29,10 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [inputValue, setInputValue] = useState('');
 
+  React.useEffect(() => {
+    if (isOpen) setInputValue('');
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isConfirmDisabled = confirmInputText ? inputValue !== confirmInputText : false;

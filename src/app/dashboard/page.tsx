@@ -142,9 +142,10 @@ export default async function DashboardPage() {
             </h3>
             
             {activeAbsences.length === 0 ? (
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', padding: '1rem 0' }}>
-                All employees are present today. No absences logged.
-              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '2rem 1rem', color: 'var(--foreground-muted)' }}>
+                <CalendarDays size={32} style={{ opacity: 0.3 }} />
+                <span style={{ fontSize: '0.875rem' }}>All employees are present today. No absences logged.</span>
+              </div>
             ) : (
               <div className="table-container">
                 <table className="table">
@@ -187,9 +188,10 @@ export default async function DashboardPage() {
           <div className="card">
             <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Recently Logged Leaves</h3>
             {recentLeaves.length === 0 ? (
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', padding: '1rem 0' }}>
-                No leave records registered yet.
-              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '2rem 1rem', color: 'var(--foreground-muted)' }}>
+                <Clock size={32} style={{ opacity: 0.3 }} />
+                <span style={{ fontSize: '0.875rem' }}>No leave records registered yet.</span>
+              </div>
             ) : (
               <div className="table-container">
                 <table className="table">
