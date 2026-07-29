@@ -30,7 +30,10 @@ export default function ConfirmDialog({
   const [inputValue, setInputValue] = useState('');
 
   React.useEffect(() => {
-    if (isOpen) setInputValue('');
+    if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInputValue('');
+    }
   }, [isOpen]);
 
   if (!isOpen) return null;
