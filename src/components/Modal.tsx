@@ -35,14 +35,22 @@ export default function Modal({
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (isOpen) {
+      previouslyFocused.current = document.activeElement as HTMLElement | null;
+      const container = containerRef.current;
+      const initialFocusTarget = container?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      initialFocusTarget?.focus();
+
+      return () => {
+        previouslyFocused.current?.focus();
+      };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen) return;
 
-    previouslyFocused.current = document.activeElement as HTMLElement | null;
-
     const container = containerRef.current;
-    const initialFocusTarget = container?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-    initialFocusTarget?.focus();
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -72,7 +80,6 @@ export default function Modal({
     document.addEventListener('keydown', handleKeyDown, true);
     return () => {
       document.removeEventListener('keydown', handleKeyDown, true);
-      previouslyFocused.current?.focus();
     };
   }, [isOpen, onClose]);
 

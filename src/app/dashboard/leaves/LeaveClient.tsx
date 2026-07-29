@@ -375,14 +375,16 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                     )}
                   </td>
                   <td className="no-print" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button 
-                      className="btn btn-secondary"
-                      style={{ padding: '0.375rem', marginRight: '0.5rem', minWidth: 'auto', border: 'none' }}
-                      onClick={() => openEditLeaveModal(rec)}
-                      title="Edit Leave Record"
-                    >
-                      <Edit2 size={15} />
-                    </button>
+                    {rec.leave_type !== 'Earned (Encashed)' && (
+                      <button 
+                        className="btn btn-secondary"
+                        style={{ padding: '0.375rem', marginRight: '0.5rem', minWidth: 'auto', border: 'none' }}
+                        onClick={() => openEditLeaveModal(rec)}
+                        title="Edit Leave Record"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                    )}
                     <button 
                       className="btn btn-danger-outline"
                       style={{ padding: '0.375rem', minWidth: 'auto' }}
@@ -473,9 +475,6 @@ export default function LeaveClient({ initialRecords, employees }: LeaveClientPr
                     <option value="Earned">Earned Leave (EL)</option>
                     <option value="Maternity">Maternity Leave (ML)</option>
                     <option value="LWP">Leave Without Pay (LWP)</option>
-                    {editingRecord && editingRecord.leave_type === 'Earned (Encashed)' && (
-                      <option value="Earned (Encashed)">Earned Leave (Encashed)</option>
-                    )}
                   </select>
                 </div>
 

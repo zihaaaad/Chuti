@@ -885,6 +885,10 @@ export async function updateLeaveRecord(formData: FormData) {
       return { success: false, error: 'Leave record not found.' };
     }
 
+    if (oldRecord.leave_type === 'Earned (Encashed)' || leave_type === 'Earned (Encashed)') {
+      return { success: false, error: 'Encashment records cannot be edited. Please delete and recreate.' };
+    }
+
     // Check if employee exists and is active
     const employee = await db.get('SELECT status FROM employees WHERE id = ?', employee_id);
     if (!employee) {
