@@ -1,117 +1,92 @@
 # Chuti — Leave Management System
 
-[![Build & Release Status](https://github.com/zihaaaad/Chuti/actions/workflows/build-release.yml/badge.svg)](https://github.com/zihaaaad/Chuti/actions/workflows/build-release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/zihaaaad/Chuti?color=blue)](https://github.com/zihaaaad/Chuti/releases/latest)
-[![License](https://img.shields.io/github/license/zihaaaad/Chuti?color=green)](LICENSE)
-[![Platform Support](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-orange)](#)
-[![Offline Status](https://img.shields.io/badge/Offline-100%25%20Local-success)](#)
-
-**Chuti** (ছুটি) is a lightweight, offline-first, local Leave Management System designed specifically for the operational needs of companies, schools, colleges, and training institutes. It provides a simple, unified interface for administrators to manage employee directories, record leave history, adjust balances, and compile payroll summary reports without requiring cloud hosting, external database servers, or an active internet connection.
+**Chuti** is a lightweight, offline-first, local Leave Management System designed specifically for the operational needs of companies, schools, colleges, and training institutes. It provides a simple, unified interface for administrators to manage employee directories, record leave history, adjust balances, and compile payroll summary reports—without requiring cloud hosting, external database servers, or an active internet connection.
 
 ---
 
 ## Key Features
 
-*   **Local & Secure:** All data stays within your building. Information is stored in a robust SQLite database on the host machine.
-*   **Multi-Mode Launcher:**
-    *   **Desktop App:** Run as a standalone Windows application (`Chuti-Setup.exe` or `Chuti-Portable.exe`) with a clean user interface.
-    *   **LAN sharing:** Run on one main host computer and allow all colleagues on the same office Wi-Fi or LAN to access the portal from their web browsers.
-*   **Single-Admin Console:** No complex employee login flows or accounts. A single administrator manages directories, records leaves, and manages settings from one interface.
-*   **Preconfigured Leave Quotas:** Built-in tracking for Casual Leave (CL - 10 days), Sick Leave (SL - 14 days), Earned Leave (EL - 15 days), and Maternity Leave (ML).
-*   **Smart Business Logic:**
-    *   **Sandwich Rule Toggle:** Automatically counts weekends and holidays falling within a leave range as taken leaves when enabled.
-    *   **Late Attendance Deductions:** Automatically calculates and deducts Casual Leave (CL) days based on monthly late count thresholds (e.g., 3 lates = 1 CL day deducted).
-    *   **Leave Encashment:** Easily log and deduct encashed Earned Leave days.
-*   **Document Attachments:** Upload scans, medical certificates, or applications directly to local storage and preview them inside the app.
-*   **A4 Landscape Reports:** Stylized, printer-friendly reports formatted for A4 landscape layouts (Leave Ledgers, Monthly Payroll Summaries, and Excel-compatible CSV exports).
-*   **Power-Resistant Integrity:** Runs in Write-Ahead Logging (WAL) SQLite mode to prevent database corruption from sudden power cuts, and automatically schedules dated rolling backups.
+- **Local & Secure Data Integrity:** All data remains completely on-premises. Information is stored in a robust, WAL-configured SQLite database on the host machine, ensuring resilience against power outages.
+- **Multi-Mode Execution:**
+  - **Desktop Application:** Run as a standalone Windows application (`Chuti-Setup.exe` or `Chuti-Portable.exe`) with a clean, native user interface.
+  - **LAN Network Sharing:** Host the application on a primary computer, allowing all colleagues on the same office Local Area Network (LAN) to securely access the portal via their web browsers.
+- **Single-Admin Architecture:** Eliminates complex employee login flows. A single centralized administrator manages directories, records leaves, and configures settings from one intuitive interface.
+- **Automated Business Logic:**
+  - **Preconfigured Quotas:** Built-in tracking for Casual Leave (CL), Sick Leave (SL), Earned Leave (EL), and Maternity Leave (ML).
+  - **Sandwich Rule Toggle:** Automatically calculates weekends and holidays falling within a leave range as taken leaves when enabled.
+  - **Attendance Deductions:** Automatically calculates and deducts leaves based on configurable monthly late-attendance thresholds.
+  - **Leave Encashment:** Easily log and deduct encashed Earned Leave days.
+- **Document Management:** Upload scans, medical certificates, or applications directly to local storage for quick preview inside the application.
+- **Automated Rolling Backups:** The system schedules and maintains dated rolling backups of the entire database automatically on startup.
+- **Print-Ready Reporting:** Stylized, printer-friendly reports formatted specifically for A4 landscape layouts (Leave Ledgers, Monthly Payroll Summaries, and Excel-compatible CSV exports).
 
 ---
 
-## Installation & Usage
+## Installation & Deployment
 
 ### Method A: Standalone Desktop App (Recommended)
 No technical knowledge or pre-installed software is required.
 
-1.  Go to the [Latest Releases](https://github.com/zihaaaad/Chuti/releases/latest) page.
-2.  Download **`Chuti-Setup.exe`** (Installer) or **`Chuti-Portable.exe`** (Run from folder).
-3.  Double-click the file to launch. (Windows SmartScreen may show a warning — click *More Info* -> *Run Anyway*).
-4.  On first launch, choose a folder (e.g., `Documents/ChutiData`) where the system will save the database, attachments, and backups.
+1. Navigate to the **Releases** section on GitHub.
+2. Download **`Chuti-Setup.exe`** (Installer) or **`Chuti-Portable.exe`** (Standalone).
+3. Execute the file. 
+4. Upon first launch, select a designated directory (e.g., `Documents/ChutiData`) where the system will safely store the database, attachments, and automated backups.
 
-### Method B: Self-Hosted Server (Developers / Advanced)
-If you want to run Chuti directly from source code:
+### Method B: Self-Hosted Server (For Developers)
+If you prefer to run the system directly from the source code:
 
-#### Windows Launcher:
-1.  Ensure you have **Node.js v18+** installed.
-2.  Double-click **`start.bat`**.
-3.  The launcher script will install dependencies, prompt you to start, and launch the portal in your browser at `http://localhost:3000`.
+**Windows Environment:**
+1. Ensure **Node.js v18+** is installed.
+2. Execute **`start.bat`**.
+3. The script will automatically resolve dependencies and launch the portal locally.
 
-#### Mac / Linux manual startup:
+**macOS / Linux Environment:**
 ```bash
 # 1. Install dependencies
 npm install --legacy-peer-deps
 
-# 2. Build Next.js application
+# 2. Build the Next.js application
 npm run build
 
 # 3. Start the LAN network server
 npm run start-lan
 ```
 
-> [!WARNING]
-> **Updating Method B to a new version:** unlike the desktop app, this mode stores your database (`database.db`), uploads, and backups **directly inside this project folder**, not in a separate data folder you chose yourself. Before downloading a new version:
-> 1. Copy `database.db`, the `uploads/` folder, and the `backups/` folder somewhere safe (or just copy the whole project folder as a backup).
-> 2. Download or clone the new version into a **fresh, separate folder** — don't delete or overwrite your existing one.
-> 3. Copy your saved `database.db`, `uploads/`, and `backups/` into the new folder before running `start.bat` for the first time.
-> 4. Once you've confirmed the new version is running correctly with your data intact, it's safe to delete the old folder.
->
-> Skipping this — for example, deleting the old folder and extracting a fresh download in its place — will start you with an empty database, since a fresh download never contains your `database.db`.
-
 ---
 
-## Default Credentials
+## Network & Administration
 
-Upon opening the login screen, enter the default admin password:
+### Default Credentials
+Upon launching the administrative dashboard, use the default credentials:
 ```text
 admin123
 ```
-> [!IMPORTANT]
-> For security reasons, please navigate to the **Settings** panel and change your password immediately after your first login.
+*Note: Navigate to the Settings panel and change this password immediately after your first login.*
+
+### Office LAN Sharing
+To deploy Chuti across your local office network:
+1. Launch the application on the designated host machine.
+2. Click the **Network URL** indicator in the dashboard to view your LAN address (e.g., `http://192.168.1.100:3000`).
+3. Distribute this URL to authorized personnel. Ensure your host machine's firewall allows inbound TCP traffic on Port 3000.
 
 ---
 
-## Office LAN Sharing
+## Data Migration & Recovery
 
-Chuti is built to work as a shared portal on your local network:
-1.  Launch the application on the host machine.
-2.  Click the **Network URL** popup in the dashboard to see your LAN address (e.g., `http://192.168.1.100:3000`).
-3.  Share this link with your coworkers. Anyone connected to the same office Wi-Fi can open the link in their web browser to access the system.
-4.  *Note:* Ensure that your host machine's firewall permits incoming traffic on Port 3000.
+### Restoring Backups
+Chuti maintains a rolling 30-day backup history. To restore:
+1. Navigate to the **Settings** panel.
+2. Locate the **Restore Backup** module.
+3. Select a timestamped backup. The system will automatically create a snapshot of your current state before rolling back, ensuring zero data loss if a mistake is made.
 
----
-
-## System Backups & Migration
-
-### Automatic Backups
-Chuti automatically creates a timestamped database backup in your data folder's `backups/` directory on every startup, rotating and keeping the last 30 backups to save disk space.
-
-### Restoring a Backup
-If something goes wrong — a bad import, an accidental deletion, or you just want to roll back to an earlier point in time — you don't need to touch any files by hand. Go to **Settings**, find the **Restore Backup** panel, and pick a backup from the list (each one is labeled with the date and time it was taken). Restoring automatically snapshots your *current* database first, so if you pick the wrong backup by mistake, that snapshot is sitting right there in the same list to restore back from.
-
-### Migrating to a New PC
-Since the database file is completely self-contained, migrating to another computer is extremely simple:
-1.  Locate your chosen **Data Folder** (containing `database.db`, `uploads/`, and `backups/`).
-2.  Copy this folder to a USB drive and move it to the new computer.
-3.  Launch the Chuti app on the new computer and select the copied folder as your Data Folder. All employee records, settings, and documents will load instantly.
+### Hardware Migration
+Migrating to new hardware is entirely frictionless:
+1. Locate your selected **Data Folder** (which contains `database.db`, the `uploads/` directory, and `backups/`).
+2. Transfer this entire folder to the new hardware via USB or network transfer.
+3. Launch Chuti on the new machine and point it to the copied directory. All records and configurations will resume instantly.
 
 ---
 
-## Contributing
+## License & Open Source
 
-We welcome contributions to Chuti! If you'd like to help improve the system, please check out our [Contributing Guidelines](https://github.com/zihaaaad/Chuti?tab=contributing-ov-file) for more details on how to get started.
-
----
-
-## License
-
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details. Feel free to use, modify, and distribute it within your organization.
+This project is licensed under the **MIT License**. See the `LICENSE` file for details. You are encouraged to utilize, modify, and distribute this software within your organization.
