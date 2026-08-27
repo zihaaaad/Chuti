@@ -1,31 +1,43 @@
 name: Build & Release
 
-# Trigger semantics (important — this changed; see the two jobs below):
-#   - push to master  -> verification only. Installs deps, typechecks,
-#     lints, and runs `next build`. Confirms master isn't broken. Does NOT
-#     package an EXE or publish a release, so an untested/WIP commit can
-#     never become what users' "latest" download links serve.
-#   - push of a `v*` tag  -> full build + publish. This is how you cut an
-#     actual release: bump "version" in package.json, commit, then
-#     `git tag vX.Y.Z && git push origin vX.Y.Z` (or `--tags`).
-#   - workflow_dispatch  -> manual "build and publish anyway" escape hatch,
-#     runnable from the Actions tab without needing a tag.
+# Trigger semantics:
+#   - push to master  -> verification only (fast Linux runner, cancels older runs on new push, path-filtered).
+#   - push of a `v*` tag -> full Windows packaging + GitHub release publish.
+#   - workflow_dispatch -> manual build & publish escape hatch.
 on:
   push:
     branches:
       - master
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'next.config.ts'
+      - 'eslint.config.mjs'
+      - 'main.js'
+      - 'preload.js'
+      - '.github/workflows/build-release.yml'
     tags:
       - 'v*'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write    # Needed to create GitHub Releases and upload assets
 
 jobs:
-  # ── Runs on every push to master: fast feedback that nothing is broken. ──────
+  # ── Runs on every push to master: fast verification on Linux (1x multiplier vs Windows 2x) ──
   verify:
     name: Verify (typecheck, lint, build)
-    runs-on: windows-latest
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -37,8 +49,16 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
       - name: Type check
         run: npx tsc --noEmit
@@ -49,11 +69,12 @@ jobs:
       - name: Build Next.js (standalone)
         run: npm run build
 
-  # ── Only runs for an actual version tag or a manual dispatch. ────────────────
+  # ── Only runs for an actual version tag or a manual dispatch: Windows packaging ───────────────
   release:
     name: Build & Publish Windows EXE
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
+    timeout-minutes: 15
 
     steps:
       # ── 1. Checkout source ─────────────────────────────────────────────────
@@ -67,9 +88,17 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
       # ── 3. Install dependencies ────────────────────────────────────────────
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
       # ── 4. Verify before packaging — a release build should never skip this ──
       - name: Type check
