@@ -42,6 +42,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -80,6 +82,8 @@ jobs:
       # ── 1. Checkout source ─────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       # ── 2. Set up Node.js ──────────────────────────────────────────────────
       - name: Set up Node.js 22
