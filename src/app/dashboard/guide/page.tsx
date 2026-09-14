@@ -122,11 +122,14 @@ export default async function GuidePage() {
             <p><strong>Balance check</strong> recalculates balances from the leave records and fixes any mismatch.</p>
             <p>The <strong>Activity log</strong> records every change with the time and the browser that made it.</p>
             <h3>Sharing over the office network</h3>
+            <p>New installations can only be used on the host computer. Sharing is an explicit choice:</p>
             <ol>
-              <li>In the desktop app, use <strong>Network → Copy LAN URL</strong> (for example <code>http://192.168.1.100:3000</code>).</li>
+              <li>In the desktop app, choose <strong>Network → Allow Access from Other Computers</strong>. Chuti restarts.</li>
+              <li>Use <strong>Network → Copy LAN URL to Clipboard</strong> (for example <code>http://192.168.1.100:3000</code>).</li>
               <li>Allow inbound TCP on that port in Windows Firewall on the host computer.</li>
               <li>Colleagues open the URL in a browser and sign in with the admin password.</li>
             </ol>
+            <p>With <code>start.bat</code>, answer <strong>Y</strong> when asked &ldquo;Allow network access?&rdquo;.</p>
             <Alert tone="warning">Anyone who knows the admin password can change every record. Use a strong password and change it when staff with access leave.</Alert>
           </section>
         </article>

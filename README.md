@@ -67,10 +67,12 @@ npm run start-lan
 A new installation starts with the password `admin123`. Chuti will not open the console until you replace it with your own password (at least 8 characters). Changing the password signs out every other browser.
 
 ### Office LAN Sharing
-To deploy Chuti across your local office network:
-1. Launch the application on the designated host machine.
-2. In the desktop app, use **Network → Copy LAN URL to Clipboard** (e.g., `http://192.168.1.100:3000`).
-3. Distribute this URL to authorized personnel. Ensure your host machine's firewall allows inbound TCP traffic on that port.
+For safety, a new installation can only be used on the computer it runs on. To share it across your office network:
+1. On the host computer, choose **Network → Allow Access from Other Computers**. Chuti restarts.
+2. Use **Network → Copy LAN URL to Clipboard** (e.g., `http://192.168.1.100:3000`) and share it with authorised staff.
+3. Make sure the host's firewall allows inbound TCP traffic on that port.
+
+Only enable this on a trusted network, with a strong admin password. Installations that already existed before this setting was introduced keep network access on after updating. When running from source, `npm start` / `npm run dev` are local-only; use `npm run start-lan` / `npm run dev-lan`, or answer **Y** to the network question in `start.bat`.
 
 ---
 

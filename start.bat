@@ -28,8 +28,8 @@ if not exist node_modules (
     echo.
     echo [INFO] First time setup detected!
     echo Installing required files. This may take a few minutes. Please wait...
-    call npm install
-    if %errorlevel% neq 0 (
+    call npm install --legacy-peer-deps
+    if errorlevel 1 (
         echo [ERROR] Installation failed! Please check your internet connection.
         pause
         exit
@@ -51,62 +51,81 @@ echo [1] Start System (Recommended - Normal Mode)
 echo [2] Update/Rebuild System (Run this if you got a new version)
 echo [3] Developer Mode (For coding)
 echo =========================================================
+set mode=
 set /p mode="Select an option (1, 2, or 3) [Default is 1]: "
 if "%mode%"=="" set mode=1
 
-if "%mode%"=="3" (
-    echo.
-    echo Starting server in Developer Mode...
-    echo.
-    echo ---------------------------------------------------------
-    echo Chuti Leave Management System is starting!
-    echo Access URLs:
-    echo - Local computer:    http://localhost:3000
-    echo - Network Access:    http://%LOCAL_IP%:3000
-    echo ---------------------------------------------------------
-    start http://localhost:3000
-    call npm run dev-lan
-) else if "%mode%"=="2" (
-    echo.
-    if exist database.db (
-        echo [INFO] Backing up your current database before updating...
-        node -e "const fs=require('fs');const ts=new Date().toISOString().replace(/[:.]/g,'-');const dir='pre_update_backups';if(!fs.existsSync(dir))fs.mkdirSync(dir);const base='database_backup_'+ts+'.db';fs.copyFileSync('database.db',dir+'/'+base);['-wal','-shm'].forEach(function(ext){if(fs.existsSync('database.db'+ext))fs.copyFileSync('database.db'+ext,dir+'/'+base+ext);});console.log('[SUCCESS] Backup saved to '+dir+'/'+base);"
-        echo.
-    ) else (
-        echo [INFO] No existing database.db found — nothing to back up yet.
-        echo.
-    )
-    echo [INFO] Rebuilding the system... This will take a few minutes.
-    call npm run build
-    echo.
-    echo [SUCCESS] Build complete! Starting server...
-    echo.
-    echo ---------------------------------------------------------
-    echo Chuti Leave Management System is ready!
-    echo Access URLs:
-    echo - Local computer:    http://localhost:3000
-    echo - Network Access:    http://%LOCAL_IP%:3000
-    echo ---------------------------------------------------------
-    start http://localhost:3000
-    call npm run start-lan
-) else (
-    :: Mode 1: Start Normal System
-    echo.
-    if not exist .next (
-        echo [INFO] First time startup: Building the system for speed...
-        echo Please wait, this will take a few minutes...
-        call npm run build
-    )
-    
-    echo.
-    echo Starting server...
-    echo.
-    echo ---------------------------------------------------------
-    echo Chuti Leave Management System is ready!
-    echo Access URLs:
-    echo - Local computer:    http://localhost:3000
-    echo - Network Access:    http://%LOCAL_IP%:3000
-    echo ---------------------------------------------------------
-    start http://localhost:3000
-    call npm run start-lan
+:: 4. Network access. Off by default: only this computer can open Chuti.
+echo.
+echo Should other computers on this office network be able to use Chuti?
+echo Only choose Y on a trusted network, and make sure the admin password is strong.
+set lan=
+set /p lan="Allow network access? (y/N): "
+set RUN_START=start
+set RUN_DEV=dev
+set NETWORK_LINE=- Network Access:    off (only this computer)
+if /i "%lan%"=="y" (
+    set RUN_START=start-lan
+    set RUN_DEV=dev-lan
+    set NETWORK_LINE=- Network Access:    http://%LOCAL_IP%:3000
 )
+
+if "%mode%"=="3" goto dev
+if "%mode%"=="2" goto rebuild
+goto normal
+
+:dev
+echo.
+echo Starting server in Developer Mode...
+call :banner
+start http://localhost:3000
+call npm run %RUN_DEV%
+goto :eof
+
+:rebuild
+echo.
+if exist database.db (
+    echo [INFO] Backing up your current database before updating...
+    node -e "const fs=require('fs');const ts=new Date().toISOString().replace(/[:.]/g,'-');const dir='pre_update_backups';if(!fs.existsSync(dir))fs.mkdirSync(dir);const base='database_backup_'+ts+'.db';fs.copyFileSync('database.db',dir+'/'+base);['-wal','-shm'].forEach(function(ext){if(fs.existsSync('database.db'+ext))fs.copyFileSync('database.db'+ext,dir+'/'+base+ext);});console.log('[SUCCESS] Backup saved to '+dir+'/'+base);"
+    echo.
+) else (
+    echo [INFO] No existing database.db found - nothing to back up yet.
+    echo.
+)
+echo [INFO] Rebuilding the system... This will take a few minutes.
+call npm run build
+if errorlevel 1 (
+    echo [ERROR] The build failed. Your data was not changed.
+    pause
+    exit
+)
+echo.
+echo [SUCCESS] Build complete! Starting server...
+call :banner
+start http://localhost:3000
+call npm run %RUN_START%
+goto :eof
+
+:normal
+echo.
+if not exist .next (
+    echo [INFO] First time startup: Building the system for speed...
+    echo Please wait, this will take a few minutes...
+    call npm run build
+)
+echo.
+echo Starting server...
+call :banner
+start http://localhost:3000
+call npm run %RUN_START%
+goto :eof
+
+:banner
+echo.
+echo ---------------------------------------------------------
+echo Chuti Leave Management System is ready!
+echo Access URLs:
+echo - Local computer:    http://localhost:3000
+echo %NETWORK_LINE%
+echo ---------------------------------------------------------
+goto :eof

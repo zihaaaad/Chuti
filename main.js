@@ -25,7 +25,10 @@ const { spawn } = require('child_process');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const APP_NAME       = 'Chuti';
-const CONFIG_DIR     = path.join(app.getPath('appData'), APP_NAME);
+// CHUTI_CONFIG_DIR relocates Chuti's own config, log, key store and Electron
+// profile (portable setups, and running a test copy without touching a real install).
+const CONFIG_DIR     = process.env.CHUTI_CONFIG_DIR || path.join(app.getPath('appData'), APP_NAME);
+if (process.env.CHUTI_CONFIG_DIR) app.setPath('userData', path.join(CONFIG_DIR, 'profile'));
 const CONFIG_FILE    = path.join(CONFIG_DIR, 'config.json');
 const LOG_FILE       = path.join(CONFIG_DIR, 'app.log');
 const STARTING_PORT  = 3000;
@@ -101,7 +104,7 @@ function saveConfig(cfg) {
 }
 
 // ─── Free-port finder ─────────────────────────────────────────────────────────
-function findFreePort(startPort) {
+function findFreePort(startPort, host) {
   return new Promise((resolve, reject) => {
     let port = startPort;
 
@@ -114,11 +117,53 @@ function findFreePort(startPort) {
       srv.once('listening', () => {
         srv.close(() => resolve(port));
       });
-      srv.listen(port, '0.0.0.0');
+      srv.listen(port, host);
     }
 
     tryPort();
   });
+}
+
+// ─── Network exposure ─────────────────────────────────────────────────────────
+// By default the server listens only on this computer (127.0.0.1). Sharing with
+// colleagues over the office network is an explicit choice in the Network menu.
+// Installs that existed before this setting keep LAN access on, so updating
+// never cuts an office off without warning.
+function lanAccessEnabled(cfg) {
+  return !!(cfg && cfg.lanAccess);
+}
+
+function bindHost(cfg) {
+  return lanAccessEnabled(cfg) ? '0.0.0.0' : '127.0.0.1';
+}
+
+async function setLanAccess(enabled) {
+  if (enabled) {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Allow access from other computers?',
+      message: 'Anyone on this network will be able to open the Chuti sign-in page.',
+      detail: 'They still need the admin password, which gives full access to all staff records. Before turning this on, make sure the admin password is long and not shared, and only use trusted networks (not public Wi-Fi).\n\nChuti will restart to apply the change.',
+      buttons: ['Allow and restart', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    if (response !== 0) return;
+  } else {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: 'Stop network access?',
+      message: 'Only this computer will be able to use Chuti. Colleagues using the network address will be disconnected.',
+      buttons: ['Stop and restart', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response !== 0) return;
+  }
+  saveConfig({ ...(loadConfig() || {}), lanAccess: enabled });
+  log(`LAN access ${enabled ? 'enabled' : 'disabled'}; restarting`);
+  app.relaunch();
+  app.quit();
 }
 
 // ─── LAN IP helper ────────────────────────────────────────────────────────────
@@ -271,7 +316,7 @@ async function pickDataFolder(parentWindow) {
 }
 
 // ─── Spawn Next.js server ─────────────────────────────────────────────────────
-function spawnServer(port, appDataDir) {
+function spawnServer(port, appDataDir, host) {
   // In production (packaged app), the standalone server lives in resources/
   // In development, we run `next start` via npm.
   const isProd = app.isPackaged;
@@ -286,8 +331,9 @@ function spawnServer(port, appDataDir) {
   } else {
     // Development: use `node_modules/.bin/next start`
     serverPath = process.execPath; // node
-    const nextBin = path.join(__dirname, 'node_modules', '.bin', 'next');
-    args = [nextBin, 'start', '-p', String(port), '-H', '0.0.0.0'];
+    // The real Node entry point: node_modules/.bin/next is a shell shim on Windows.
+    const nextBin = require.resolve('next/dist/bin/next', { paths: [__dirname] });
+    args = [nextBin, 'start', '-p', String(port), '-H', host];
     cwd  = __dirname;
   }
 
@@ -295,7 +341,7 @@ function spawnServer(port, appDataDir) {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     PORT:         String(port),
-    HOSTNAME:     '0.0.0.0',
+    HOSTNAME:     host,
     APP_DATA_DIR: appDataDir,
     NODE_ENV:     'production',
     CHUTI_INTERNAL_TOKEN: INTERNAL_TOKEN,
@@ -322,6 +368,7 @@ function spawnServer(port, appDataDir) {
 // ─── Create main window ───────────────────────────────────────────────────────
 function createWindow(port) {
   const lanIP = getLanIP();
+  const lanOn = lanAccessEnabled(loadConfig());
 
   mainWindow = new BrowserWindow({
     width:           1280,
@@ -387,16 +434,28 @@ function createWindow(port) {
       label: 'Network',
       submenu: [
         {
-          label: `LAN Access URL: http://${lanIP}:${port}`,
-          enabled: false,
+          label: 'Allow Access from Other Computers',
+          type: 'checkbox',
+          checked: lanOn,
+          click: () => setLanAccess(!lanOn),
         },
-        {
-          label: 'Copy LAN URL to Clipboard',
-          click: () => {
-            const { clipboard } = require('electron');
-            clipboard.writeText(`http://${lanIP}:${port}`);
-          },
-        },
+        { type: 'separator' },
+        ...(lanOn
+          ? [
+              { label: `LAN Access URL: http://${lanIP}:${port}`, enabled: false },
+              {
+                label: 'Copy LAN URL to Clipboard',
+                click: async () => {
+                  // clipboard methods return Promises since Electron 40.
+                  try {
+                    await require('electron').clipboard.writeText(`http://${lanIP}:${port}`);
+                  } catch (e) {
+                    log(`Clipboard write failed: ${e.message}`);
+                  }
+                },
+              },
+            ]
+          : [{ label: 'Only this computer can use Chuti', enabled: false }]),
         { type: 'separator' },
         {
           label: 'Open in Browser',
@@ -447,7 +506,9 @@ function createWindow(port) {
         type:    'info',
         title:   'Chuti is running',
         message: 'Chuti is ready.',
-        detail:  `Colleagues on the same network can open:\n${lanURL}\n\nYour data is stored in:\n${dataDir}\n\nYou can find both again under Network and Help in the menu.`,
+        detail:  lanOn
+          ? `Colleagues on the same network can open:\n${lanURL}\n\nYour data is stored in:\n${dataDir}\n\nYou can find both again under Network and Help in the menu.`
+          : `For safety, only this computer can use Chuti. To let colleagues on the office network use it, choose Network → Allow Access from Other Computers.\n\nYour data is stored in:\n${dataDir}`,
         buttons: ['OK'],
       }).catch(() => {});
       saveConfig({ ...cfg, welcomeShown: true });
@@ -554,10 +615,19 @@ app.whenReady().then(async () => {
         return;
       }
 
-      cfg = { dataDir: chosen };
+      // New installs start with network access off.
+      cfg = { dataDir: chosen, lanAccess: false };
       saveConfig(cfg);
       log(`Data folder selected: ${chosen}`);
     }
+
+    // Installs from before the network setting existed keep LAN access on.
+    if (cfg.lanAccess === undefined) {
+      cfg.lanAccess = !!cfg.welcomeShown || fs.existsSync(path.join(cfg.dataDir, 'database.db'));
+      saveConfig(cfg);
+    }
+    const host = bindHost(cfg);
+    log(`Network access: ${cfg.lanAccess ? 'LAN (0.0.0.0)' : 'this computer only (127.0.0.1)'}`);
 
     dataDir = cfg.dataDir;
 
@@ -568,14 +638,14 @@ app.whenReady().then(async () => {
     }
 
     // 2. Find a free port
-    appPort = await findFreePort(STARTING_PORT);
+    appPort = await findFreePort(STARTING_PORT, host);
     log(`Using port ${appPort}`);
 
     // 3. Start Next.js server
     if (app.isPackaged) {
       log('Starting Next.js server in-process (production)…');
       process.env.PORT = String(appPort);
-      process.env.HOSTNAME = '0.0.0.0';
+      process.env.HOSTNAME = host;
       process.env.APP_DATA_DIR = dataDir;
       process.env.NODE_ENV = 'production';
       process.env.CHUTI_INTERNAL_TOKEN = INTERNAL_TOKEN;
@@ -593,7 +663,7 @@ app.whenReady().then(async () => {
       require(serverPath);
     } else {
       log('Spawning Next.js server (development)…');
-      serverProc = spawnServer(appPort, dataDir);
+      serverProc = spawnServer(appPort, dataDir, host);
     }
 
     // 4. Wait for server to be ready
@@ -665,7 +735,7 @@ function fromAppWindow(event) {
   }
 }
 
-ipcMain.handle('get-lan-url', () => `http://${getLanIP()}:${appPort}`);
+ipcMain.handle('get-lan-url', () => (lanAccessEnabled(loadConfig()) ? `http://${getLanIP()}:${appPort}` : null));
 ipcMain.handle('get-data-dir', () => dataDir);
 ipcMain.handle('get-port',     () => appPort);
 ipcMain.handle('open-data-dir', () => shell.openPath(dataDir));

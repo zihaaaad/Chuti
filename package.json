@@ -9,10 +9,10 @@
     "email": "dev@chuti.app"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "dev-lan": "next dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 127.0.0.1",
     "start-lan": "next start -H 0.0.0.0",
     "lint": "eslint",
     "test": "vitest run",
@@ -121,7 +121,7 @@
     "@types/sqlite3": "^3.1.11",
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
-    "electron": "36.9.5",
+    "electron": "44.3.0",
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
@@ -129,5 +129,10 @@
     "vite": "^8.3.0",
     "vitest": "^5.0.0",
     "wait-on": "^9.0.10"
+  },
+  "overrides": {
+    "@electron/rebuild": {
+      "node-abi": "^4.35.0"
+    }
   }
 }

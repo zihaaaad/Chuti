@@ -29,10 +29,12 @@ If you are running the system via the code files on Windows:
 
 You only need to install and run the application on **one host computer** (for example, the HR administrator's computer). Other computers, tablets, or smartphones connected to the same office Wi-Fi can access the portal instantly:
 
-1.  Keep the Chuti application running on the host computer.
-2.  Locate the **Network URL** displayed on the console overview dashboard (for example, `http://192.168.1.100:3000`).
+1.  On the host computer, choose **Network → Allow Access from Other Computers** in the Chuti menu. Chuti restarts. (New installations start with this turned off, so nobody else on the network can reach the sign-in page until you decide.)
+2.  Choose **Network → Copy LAN URL to Clipboard** to get the address (for example, `http://192.168.1.100:3000`).
 3.  Have colleagues open their web browsers and type that URL into the address bar.
-4.  *Note:* If other devices cannot load the page, check the host computer's **Windows Firewall** settings and ensure incoming requests on Port 3000 are allowed.
+4.  *Note:* If other devices cannot load the page, check the host computer's **Windows Firewall** settings and ensure incoming requests on that port are allowed.
+5.  Only share on a trusted office network, and use a strong admin password. To stop sharing, untick the same menu item.
+6.  Running from `start.bat`? Answer **Y** when it asks "Allow network access?".
 
 ---
 

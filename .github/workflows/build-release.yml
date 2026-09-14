@@ -1,10 +1,29 @@
 name: Build & Release
 
 # Trigger semantics:
+#   - pull request into master -> verification (so changes are checked BEFORE merging).
 #   - push to master  -> verification only (fast Linux runner, cancels older runs on new push, path-filtered).
 #   - push of a `v*` tag -> full Windows packaging + GitHub release publish.
 #   - workflow_dispatch -> manual build & publish escape hatch.
 on:
+  pull_request:
+    branches:
+      - master
+    # Keep this list identical to push.paths below (spelled out: YAML anchors are avoided for compatibility).
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'next.config.ts'
+      - 'eslint.config.mjs'
+      - 'vitest.config.mts'
+      - 'main.js'
+      - 'preload.js'
+      - 'start.bat'
+      - '.github/workflows/build-release.yml'
   push:
     branches:
       - master
@@ -20,6 +39,7 @@ on:
       - 'vitest.config.mts'
       - 'main.js'
       - 'preload.js'
+      - 'start.bat'
       - '.github/workflows/build-release.yml'
     tags:
       - 'v*'
@@ -29,14 +49,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege by default; only the release job may write (to publish releases).
 permissions:
-  contents: write    # Needed to create GitHub Releases and upload assets
+  contents: read
 
 jobs:
-  # ── Runs on every push to master: fast verification on Linux (1x multiplier vs Windows 2x) ──
+  # ── Runs on pull requests and pushes to master: fast verification on Linux (1x multiplier vs Windows 2x) ──
   verify:
-    name: Verify (typecheck, lint, build)
-    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v')
+    name: Verify (audit, typecheck, lint, test, build)
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -63,6 +84,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
+      # Fails the check if any shipped dependency (including the Electron
+      # runtime bundled into the EXE) has a high or critical advisory.
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
       - name: Type check
         run: npx tsc --noEmit
 
@@ -81,6 +107,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 15
+    permissions:
+      contents: write    # Needed to create GitHub Releases and upload assets
 
     steps:
       # ── 1. Checkout source ─────────────────────────────────────────────────
