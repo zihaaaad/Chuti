@@ -1,72 +1,60 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   maxWidth?: string;
-  labelledBy?: string;
+  labelledBy: string;
   zIndex?: number;
-  className?: string;
-  dialogStyle?: React.CSSProperties;
-  overlayClassName?: string;
+  /** Prevent closing on Escape/backdrop, e.g. while a save is in flight. */
+  locked?: boolean;
 }
 
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Shared overlay + focus-management shell for every modal in the app: traps Tab within the
-// dialog, restores focus to whatever triggered it on close, and closes on Escape or a
-// backdrop click. Individual modals just supply their header/form/footer as children.
-export default function Modal({
-  isOpen,
-  onClose,
-  children,
-  maxWidth = '550px',
-  labelledBy,
-  zIndex = 100,
-  className = 'card',
-  dialogStyle,
-  overlayClassName
-}: ModalProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previouslyFocused = useRef<HTMLElement | null>(null);
+// Accessible dialog shell: portals to <body>, traps Tab, restores focus to the
+// trigger on close, closes on Escape or backdrop press, and locks page scroll.
+export default function Modal({ isOpen, onClose, children, maxWidth = '560px', labelledBy, zIndex = 100, locked = false }: ModalProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const lockedRef = useRef(locked);
 
   useEffect(() => {
-    if (isOpen) {
-      previouslyFocused.current = document.activeElement as HTMLElement | null;
-      const container = containerRef.current;
-      const initialFocusTarget = container?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-      initialFocusTarget?.focus();
-
-      return () => {
-        previouslyFocused.current?.focus();
-      };
-    }
-  }, [isOpen]);
+    onCloseRef.current = onClose;
+    lockedRef.current = locked;
+  });
 
   useEffect(() => {
     if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const container = ref.current;
+    const target = container?.querySelector<HTMLElement>('[data-autofocus]') ?? container?.querySelector<HTMLElement>(FOCUSABLE);
+    target?.focus();
 
-    const container = containerRef.current;
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!container) return;
+      // Only the top-most dialog handles keys.
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs[dialogs.length - 1] !== container) return;
+
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        if (!lockedRef.current) onCloseRef.current();
         return;
       }
-
-      if (e.key === 'Tab' && container) {
-        const focusableEls = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-          (el) => el.offsetParent !== null
-        );
-        if (focusableEls.length === 0) return;
-
-        const first = focusableEls[0];
-        const last = focusableEls[focusableEls.length - 1];
-
+      if (e.key === 'Tab') {
+        const items = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
         if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last.focus();
@@ -76,58 +64,28 @@ export default function Modal({
         }
       }
     };
-
-    document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
-      className={overlayClassName}
-      style={{
-        position: 'fixed',
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex,
-        backdropFilter: 'blur(2px)',
-        padding: '1rem',
-        animation: 'fade-in 0.15s ease-out'
-      }}
+      className="dialog-overlay"
+      style={{ zIndex }}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !locked) onClose();
       }}
     >
-      <div
-        ref={containerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy}
-        className={className}
-        style={{
-          width: '100%',
-          maxWidth,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          position: 'relative',
-          backgroundColor: '#ffffff',
-          boxShadow: 'var(--shadow-lg)',
-          border: '1px solid var(--border)',
-          animation: 'popup-scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
-          ...dialogStyle
-        }}
-      >
+      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className="dialog" style={{ maxWidth }}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

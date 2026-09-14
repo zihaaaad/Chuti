@@ -1,540 +1,475 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { updateSystemSettings, addHoliday, deleteHoliday, addDepartment, deleteDepartment, restoreBackup } from '@/app/actions';
-import { Settings, Lock, Check, Trash2, Calendar, Briefcase, X, Plus, Database, RotateCcw } from 'lucide-react';
+import { useId, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { Briefcase, CalendarDays, CalendarX2, Database, HardDriveDownload, Lock, Plus, RotateCcw, Scale, Settings2, Trash2, X } from 'lucide-react';
+import { addDepartment, addHoliday, deleteDepartment, deleteHoliday, updateSystemSettings } from '@/app/actions/settings';
+import { checkBalances, closeLeaveYear, createBackupNow, previewLeaveYearClose, restoreBackup, type BackupFileInfo, type YearClosePreview } from '@/app/actions/maintenance';
+import type { BalanceDrift } from '@/lib/ledger';
+import type { AppSettings } from '@/lib/settings';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
+import Modal from '@/components/Modal';
+import { Alert, DialogHeader, EmptyState, Field, fieldAria, formatDays } from '@/components/ui';
+import { WEEKDAYS, formatDisplayDate, formatDisplayRange } from '@/lib/domain/dates';
+import PasswordChangeForm from './PasswordChangeForm';
+import BackupCopiesCard, { type BackupCopiesView } from './BackupCopiesCard';
 
-interface Holiday {
-  id: number;
-  title: string;
-  start_date: string;
-  end_date: string;
+interface Props {
+  settings: AppSettings;
+  holidays: { id: number; title: string; start_date: string; end_date: string }[];
+  departments: { id: number; name: string; employees: number }[];
+  backups: BackupFileInfo[];
+  backupCopies: BackupCopiesView;
+  closings: { id: number; closed_at: string; previous_start: string; new_start: string; el_carry_cap: number }[];
+  today: string;
 }
 
-interface Department {
-  id: number;
-  name: string;
+const BACKUP_KIND_LABEL: Record<BackupFileInfo['kind'], string> = {
+  automatic: 'Automatic',
+  manual: 'Manual',
+  'before-restore': 'Before a restore',
+  'before-year-close': 'Before year close',
+};
+
+function formatSize(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-interface BackupFileInfo {
-  name: string;
-  size: number;
-  mtime: string;
-}
-
-interface SettingsClientProps {
-  initialSettings: Record<string, string>;
-  initialHolidays: Holiday[];
-  initialDepartments: Department[];
-  initialBackups: BackupFileInfo[];
-}
-
-function formatBackupSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-export default function SettingsClient({
-  initialSettings,
-  initialHolidays,
-  initialDepartments,
-  initialBackups
-}: SettingsClientProps) {
+export default function SettingsClient({ settings, holidays, departments, backups, backupCopies, closings, today }: Props) {
+  const router = useRouter();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-
-
-
-
-
-  const settings = initialSettings;
-  const holidays = initialHolidays;
-  const departments = initialDepartments;
-  const backups = initialBackups;
-
-  // System Settings Form States
-  const [instituteName, setInstituteName] = useState(settings['institute_name'] || '');
-  const [sandwichRule, setSandwichRule] = useState(settings['sandwich_rule'] || 'true');
-  const [lateThreshold, setLateThreshold] = useState(settings['late_cl_threshold'] || '3');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  
-  // Weekends
-  const initialWeekends = (settings['weekend_days'] || '').split(',').map(s => s.trim().toLowerCase());
-  const [weekends, setWeekends] = useState<string[]>(initialWeekends);
-
-  const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-  const handleWeekendChange = (day: string, checked: boolean) => {
-    if (checked) {
-      setWeekends([...weekends, day]);
-    } else {
-      setWeekends(weekends.filter(d => d !== day));
-    }
-  };
-
-  // Holiday Form States
-  const [holidayTitle, setHolidayTitle] = useState('');
-  const [holidayStart, setHolidayStart] = useState('');
-  const [holidayEnd, setHolidayEnd] = useState('');
-
-  // Department Form States
-  const [deptName, setDeptName] = useState('');
-
   const [isPending, startTransition] = useTransition();
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append('institute_name', instituteName);
-    formData.append('sandwich_rule', sandwichRule);
-    formData.append('late_cl_threshold', lateThreshold);
-    formData.append('weekend_days', weekends.join(','));
-    formData.append('current_password', currentPassword);
-    formData.append('new_password', newPassword);
+  // ── Policy
+  const [policy, setPolicy] = useState({
+    institute_name: settings.instituteName,
+    weekend_days: settings.weekendDays as string[],
+    sandwich_rule: settings.sandwichRule,
+    late_cl_threshold: String(settings.lateThreshold),
+    el_carry_cap: String(settings.elCarryCap),
+  });
+  const [policyErrors, setPolicyErrors] = useState<Record<string, string>>({});
 
+  const savePolicy = (e: React.FormEvent) => {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.set('institute_name', policy.institute_name);
+    fd.set('weekend_days', policy.weekend_days.join(','));
+    fd.set('sandwich_rule', String(policy.sandwich_rule));
+    fd.set('late_cl_threshold', policy.late_cl_threshold);
+    fd.set('el_carry_cap', policy.el_carry_cap);
     startTransition(async () => {
-      const res = await updateSystemSettings(formData);
+      const res = await updateSystemSettings(fd);
       if (res.success) {
-        showToast('System settings updated successfully.', 'success');
-        setCurrentPassword('');
-        setNewPassword('');
+        setPolicyErrors({});
+        showToast('Settings saved. They apply to leave recorded from now on.', 'success');
       } else {
-        showToast(res.error || 'Failed to update settings.', 'error');
+        setPolicyErrors(res.fieldErrors ?? {});
+        if (!res.fieldErrors) showToast(res.error, 'error');
       }
     });
   };
 
-  const handleAddHoliday = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append('title', holidayTitle);
-    formData.append('start_date', holidayStart);
-    formData.append('end_date', holidayEnd);
+  // ── Departments & holidays
+  const [deptName, setDeptName] = useState('');
+  const [holiday, setHoliday] = useState({ title: '', start_date: '', end_date: '' });
 
+  const run = (fn: () => Promise<{ success: boolean; error?: string }>, ok: string, after?: () => void) =>
     startTransition(async () => {
-      const res = await addHoliday(formData);
+      const res = await fn();
       if (res.success) {
-        setHolidayTitle('');
-        setHolidayStart('');
-        setHolidayEnd('');
-        showToast('Holiday added successfully.', 'success');
+        showToast(ok, 'success');
+        after?.();
       } else {
-        showToast(res.error || 'Failed to add holiday.', 'error');
+        showToast(res.error ?? 'Something went wrong.', 'error');
       }
     });
-  };
 
-  const handleDeleteHoliday = async (id: number, title: string) => {
-    const ok = await confirm({
-      title: 'Delete Holiday',
-      message: `Are you sure you want to delete the holiday "${title}"?`,
-      confirmText: 'Delete',
-      isDanger: true
-    });
-    if (ok) {
-      startTransition(async () => {
-        const res = await deleteHoliday(id);
-        if (res.success) {
-          showToast(`Holiday "${title}" deleted successfully.`, 'success');
-        } else {
-          showToast(res.error || 'Failed to delete holiday.', 'error');
-        }
-      });
-    }
-  };
-
-  const handleAddDept = async (e: React.FormEvent) => {
+  const submitDept = (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = new FormData();
-    formData.append('name', deptName);
-
-    startTransition(async () => {
-      const res = await addDepartment(formData);
-      if (res.success) {
-        setDeptName('');
-        showToast('Department added successfully.', 'success');
-      } else {
-        showToast(res.error || 'Failed to add department.', 'error');
-      }
-    });
+    const fd = new FormData();
+    fd.set('name', deptName);
+    run(() => addDepartment(fd), `Added department "${deptName.trim()}".`, () => setDeptName(''));
   };
 
-  const handleDeleteDept = async (id: number, name: string) => {
-    const ok = await confirm({
-      title: 'Delete Department',
-      message: `Are you sure you want to delete the department "${name}"? Employees belonging to this department won't be deleted, but it won't appear in dropdowns.`,
-      confirmText: 'Delete',
-      isDanger: true
-    });
-    if (ok) {
-      startTransition(async () => {
-        const res = await deleteDepartment(id);
-        if (res.success) {
-          showToast(`Department "${name}" deleted successfully.`, 'success');
-        } else {
-          showToast(res.error || 'Failed to delete department.', 'error');
-        }
-      });
-    }
+  const submitHoliday = (e: React.FormEvent) => {
+    e.preventDefault();
+    const fd = new FormData();
+    Object.entries({ ...holiday, end_date: holiday.end_date || holiday.start_date }).forEach(([k, v]) => fd.set(k, v));
+    run(() => addHoliday(fd), `Added holiday "${holiday.title.trim()}".`, () => setHoliday({ title: '', start_date: '', end_date: '' }));
   };
 
-  const handleRestoreBackup = async (backup: BackupFileInfo) => {
+  // ── Backups
+  const onRestore = async (b: BackupFileInfo) => {
     const ok = await confirm({
-      title: 'Restore This Backup?',
-      message: `This will replace ALL current data with the backup from ${new Date(backup.mtime).toLocaleString()}. Anything recorded since then will be lost. The current database will also be snapshotted first, just in case. The app will reflect the restored data immediately — reopen the window if anything looks stale.`,
-      confirmText: 'Restore',
+      title: 'Restore this backup?',
+      message: `All data will be replaced with the backup from ${new Date(b.mtime).toLocaleString('en-GB')}. Anything recorded after that is lost. A copy of the current data is saved first, so this can be undone by restoring that copy.`,
+      confirmText: 'Restore backup',
+      confirmInputText: 'RESTORE',
       isDanger: true,
-      confirmInputText: 'RESTORE'
     });
-    if (ok) {
-      startTransition(async () => {
-        const res = await restoreBackup(backup.name);
-        if (res.success) {
-          showToast('Backup restored successfully. Reloading…', 'success');
-          setTimeout(() => window.location.reload(), 1200);
-        } else {
-          showToast(res.error || 'Failed to restore backup.', 'error');
-        }
-      });
-    }
+    if (!ok) return;
+    startTransition(async () => {
+      const res = await restoreBackup(b.name);
+      if (res.success) {
+        showToast('Backup restored.', 'success');
+        router.refresh();
+      } else {
+        showToast(res.error, 'error');
+      }
+    });
   };
+
+  // ── Balance check
+  const [drift, setDrift] = useState<BalanceDrift[] | null>(null);
+  const runCheck = (apply: boolean) =>
+    startTransition(async () => {
+      const res = await checkBalances(apply);
+      if (!res.success) return showToast(res.error, 'error');
+      if (apply) {
+        showToast(`Corrected ${res.data.length} balance value${res.data.length === 1 ? '' : 's'}.`, 'success');
+        setDrift([]);
+      } else {
+        setDrift(res.data);
+      }
+    });
+
+  // ── Leave year close
+  const yearTitle = useId();
+  const [yearOpen, setYearOpen] = useState(false);
+  const [yearForm, setYearForm] = useState({ new_year_start: '', el_carry_cap: String(settings.elCarryCap), confirm: '' });
+  const [yearPreview, setYearPreview] = useState<YearClosePreview | null>(null);
+  const [yearError, setYearError] = useState<string | null>(null);
+
+  const openYear = () => {
+    const nextJan = `${Number(today.slice(0, 4)) + (today.slice(5, 7) === '01' ? 0 : 1)}-01-01`;
+    setYearForm({ new_year_start: nextJan, el_carry_cap: String(settings.elCarryCap), confirm: '' });
+    setYearError(null);
+    setYearPreview(null);
+    setYearOpen(true);
+    loadYearPreview(settings.elCarryCap);
+  };
+  const loadYearPreview = (cap: number) =>
+    startTransition(async () => {
+      const res = await previewLeaveYearClose(cap);
+      setYearPreview(res.success ? res.data : null);
+    });
+  const submitYear = (e: React.FormEvent) => {
+    e.preventDefault();
+    const fd = new FormData();
+    Object.entries(yearForm).forEach(([k, v]) => fd.set(k, v));
+    startTransition(async () => {
+      const res = await closeLeaveYear(fd);
+      if (res.success) {
+        showToast(`Leave year closed. ${formatDays(res.data.carriedTotal)} of EL carried forward in total.`, 'success');
+        setYearOpen(false);
+      } else {
+        setYearError(res.error);
+      }
+    });
+  };
+
+  const yearStarted = settings.leaveYearStart !== '0001-01-01';
 
   return (
-    <div className="settings-layout-grid">
-      
-      {/* Left Column: System settings form */}
-      <div>
-        <div className="card" style={{ backgroundColor: '#ffffff' }}>
-          <h3 style={{ fontSize: '1.125rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Settings size={20} />
-            General Configurations
-          </h3>
+    <div className="grid-halves">
+      <div className="stack">
+        {/* Policy */}
+        <section className="card" aria-labelledby="policy-title">
+          <div className="card-head"><h2 id="policy-title"><Settings2 size={18} aria-hidden /> Organisation &amp; leave policy</h2></div>
+          <form onSubmit={savePolicy} className="form-grid" noValidate>
+            <Field label="Organisation name" htmlFor="institute_name" required error={policyErrors.institute_name} hint="Shown in the sidebar and on printed reports.">
+              <input className="input" value={policy.institute_name} onChange={(e) => setPolicy((p) => ({ ...p, institute_name: e.target.value }))} disabled={isPending} {...fieldAria('institute_name', policyErrors.institute_name, true)} />
+            </Field>
 
-
-
-          <form onSubmit={handleSaveSettings}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="inst-name">Institute / Company Name *</label>
-              <input 
-                className="form-control" 
-                type="text" 
-                id="inst-name" 
-                value={instituteName}
-                onChange={(e) => setInstituteName(e.target.value)}
-                disabled={isPending}
-                required
-              />
-            </div>
-
-            <div className="grid-2col">
-              <div className="form-group">
-                <label className="form-label" htmlFor="sandwich-toggle">Sandwich Rule</label>
-                <select 
-                  className="form-control form-select" 
-                  id="sandwich-toggle"
-                  value={sandwichRule}
-                  onChange={(e) => setSandwichRule(e.target.value)}
-                  disabled={isPending}
-                >
-                  <option value="true">Enabled (Weekends/Holidays Counted)</option>
-                  <option value="false">Disabled (Weekends/Holidays Excluded)</option>
-                </select>
-                <span style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', display: 'block', marginTop: '0.25rem' }}>
-                  If Enabled, weekends falling within a leave range will count as taken leaves.
-                </span>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="late-threshold-input">Late Attendance Deduction</label>
-                <select 
-                  className="form-control form-select" 
-                  id="late-threshold-input"
-                  value={lateThreshold}
-                  onChange={(e) => setLateThreshold(e.target.value)}
-                  disabled={isPending}
-                >
-                  <option value="3">3 Late Arrivals = 1 CL Day Cut</option>
-                  <option value="4">4 Late Arrivals = 1 CL Day Cut</option>
-                  <option value="5">5 Late Arrivals = 1 CL Day Cut</option>
-                  <option value="999">No Late CL Deduction</option>
-                </select>
-                <span style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', display: 'block', marginTop: '0.25rem' }}>
-                  Specifies how many recorded late arrivals trigger a 1-day Casual Leave deduction.
-                </span>
-              </div>
-            </div>
-
-            {/* Weekend Configuration */}
-            <div className="form-group" style={{ margin: '1.5rem 0', padding: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-              <label className="form-label" style={{ marginBottom: '0.75rem' }}>Weekend Days</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                {daysOfWeek.map(day => (
-                  <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem', textTransform: 'capitalize', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={weekends.includes(day)}
-                      onChange={(e) => handleWeekendChange(day, e.target.checked)}
+            <fieldset className="fieldset">
+              <legend>Weekly days off</legend>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {WEEKDAYS.map((day) => (
+                  <label key={day} className="chip-check">
+                    <input
+                      type="checkbox"
+                      checked={policy.weekend_days.includes(day)}
+                      onChange={(e) =>
+                        setPolicy((p) => ({ ...p, weekend_days: e.target.checked ? [...p.weekend_days, day] : p.weekend_days.filter((d) => d !== day) }))
+                      }
                       disabled={isPending}
-                      style={{ width: '15px', height: '15px', accentColor: 'var(--primary)' }}
                     />
-                    {day.substring(0, 3)}
+                    <span style={{ textTransform: 'capitalize' }}>{day.slice(0, 3)}</span>
                   </label>
                 ))}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', display: 'block', marginTop: '0.5rem' }}>
-                Selected days will be excluded from leave counts (if Sandwich rule is disabled).
+              {policyErrors.weekend_days && <p className="field-error" style={{ marginTop: '0.4rem' }}>{policyErrors.weekend_days}</p>}
+            </fieldset>
+
+            <label className="check" style={{ alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={policy.sandwich_rule} onChange={(e) => setPolicy((p) => ({ ...p, sandwich_rule: e.target.checked }))} disabled={isPending} style={{ marginTop: 3 }} />
+              <span>
+                <strong>Sandwich rule</strong>
+                <span className="field-hint" style={{ display: 'block' }}>
+                  Count weekends and holidays that fall <em>between</em> two leave days. Example: leave on Thursday and Sunday with a Fri–Sat weekend charges 4 days instead of 2.
+                </span>
               </span>
-            </div>
+            </label>
 
-            {/* Change Admin Password */}
-            <div className="form-group" style={{ borderTop: '1px solid var(--border)', paddingTop: '1.25rem', marginTop: '1.5rem' }}>
-              <label className="form-label" htmlFor="new-pw" style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                <Lock size={14} />
-                Change Admin Password
-              </label>
-              <input
-                className="form-control"
-                type="password"
-                id="current-pw"
-                placeholder="Current password (required to set a new one)"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                disabled={isPending}
-                autoComplete="current-password"
-                style={{ marginBottom: '0.5rem' }}
-              />
-              <input
-                className="form-control"
-                type="password"
-                id="new-pw"
-                placeholder="New admin password (leave both fields empty to keep current)"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={isPending}
-                autoComplete="new-password"
-              />
+            <div className="form-grid cols-2">
+              <Field label="Late arrivals per CL day cut" htmlFor="late_cl_threshold" required error={policyErrors.late_cl_threshold} hint="e.g. 3 means every 3 late arrivals in a month cut 1 day of CL.">
+                <input className="input num" type="number" min={1} max={999} value={policy.late_cl_threshold} onChange={(e) => setPolicy((p) => ({ ...p, late_cl_threshold: e.target.value }))} disabled={isPending} {...fieldAria('late_cl_threshold', policyErrors.late_cl_threshold, true)} />
+              </Field>
+              <Field label="EL carry-forward cap" htmlFor="el_carry_cap" required error={policyErrors.el_carry_cap} hint="Most unused EL days kept when a leave year closes.">
+                <input className="input num" type="number" min={0} max={365} step={0.5} value={policy.el_carry_cap} onChange={(e) => setPolicy((p) => ({ ...p, el_carry_cap: e.target.value }))} disabled={isPending} {...fieldAria('el_carry_cap', policyErrors.el_carry_cap, true)} />
+              </Field>
             </div>
-
-            <button 
-              className="btn btn-primary" 
-              type="submit" 
-              disabled={isPending}
-              style={{ width: '100%', marginTop: '1rem' }}
-            >
-              <Check size={16} />
-              {isPending ? 'Saving...' : 'Save Configuration'}
-            </button>
+            <div><button type="submit" className="btn btn-primary" disabled={isPending}>Save policy</button></div>
           </form>
-        </div>
+        </section>
+
+        {/* Leave year */}
+        <section className="card" aria-labelledby="year-title">
+          <div className="card-head">
+            <div>
+              <h2 id="year-title"><CalendarX2 size={18} aria-hidden /> Leave year</h2>
+              <p>{yearStarted ? `The current leave year started ${formatDisplayDate(settings.leaveYearStart)}.` : 'No leave year has been closed yet. Balances cover all records.'}</p>
+            </div>
+          </div>
+          <p style={{ marginBottom: '0.75rem' }}>
+            Closing a year saves a backup, carries unused Earned Leave forward (up to the cap), lets unused CL, SL and ML lapse, and makes older records read-only.
+          </p>
+          <button type="button" className="btn btn-secondary" onClick={openYear} disabled={isPending}>Close leave year…</button>
+          {closings.length > 0 && (
+            <ul className="subtle" style={{ marginTop: '0.75rem', paddingLeft: '1rem' }}>
+              {closings.map((c) => (
+                <li key={c.id}>Closed on {new Date(c.closed_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-GB')}: new year from {formatDisplayDate(c.new_start)}, EL cap {c.el_carry_cap}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Password */}
+        <section className="card" aria-labelledby="pw-title">
+          <div className="card-head">
+            <div>
+              <h2 id="pw-title"><Lock size={18} aria-hidden /> Admin password</h2>
+              <p>Changing it signs out every other browser.</p>
+            </div>
+          </div>
+          <PasswordChangeForm />
+        </section>
       </div>
 
-      {/* Right Column: Holidays and Departments */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        
-        {/* Department Manager */}
-        <div className="card" style={{ backgroundColor: '#ffffff' }}>
-          <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Briefcase size={20} />
-            Manage Departments
-          </h3>
-
-          {/* List of departments */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
-            {departments.map(dept => (
-              <span 
-                key={dept.id} 
-                className="badge badge-success"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.375rem 0.625rem', fontSize: '0.8125rem' }}
-              >
-                {dept.name}
-                <button 
-                  onClick={() => handleDeleteDept(dept.id, dept.name)}
-                  disabled={isPending}
-                  className="btn-badge-remove"
-                  title="Remove Department"
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {/* Add Department Inline Form */}
-          <form onSubmit={handleAddDept} style={{ display: 'flex', gap: '0.5rem' }}>
-            <input 
-              className="form-control" 
-              type="text" 
-              placeholder="e.g. Science, Sales..."
-              value={deptName}
-              onChange={(e) => setDeptName(e.target.value)}
-              disabled={isPending}
-              required
-            />
-            <button className="btn btn-primary" type="submit" disabled={isPending} style={{ padding: '0.625rem 1rem' }}>
-              <Plus size={16} />
-            </button>
-          </form>
-        </div>
-
-        {/* Holiday Manager */}
-        <div className="card" style={{ backgroundColor: '#ffffff' }}>
-          <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Calendar size={20} />
-            Holiday Calendar
-          </h3>
-
-          {/* Add Holiday Form */}
-          <form onSubmit={handleAddHoliday} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1.25rem', marginBottom: '1.25rem' }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="hol-title">Holiday Title *</label>
-              <input 
-                className="form-control" 
-                type="text" 
-                id="hol-title" 
-                placeholder="e.g. Eid-ul-Fitr, Independence Day"
-                value={holidayTitle}
-                onChange={(e) => setHolidayTitle(e.target.value)}
-                disabled={isPending}
-                required
-              />
+      <div className="stack">
+        {/* Holidays */}
+        <section className="card" id="holidays" aria-labelledby="hol-title">
+          <div className="card-head">
+            <div>
+              <h2 id="hol-title"><CalendarDays size={18} aria-hidden /> Holidays</h2>
+              <p>Holidays are never charged as leave. Changes don&apos;t alter leave already recorded.</p>
             </div>
-            
-            <div className="grid-2col" style={{ marginBottom: '1rem' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" htmlFor="hol-start">Start Date *</label>
-                <input 
-                  className="form-control" 
-                  type="date" 
-                  id="hol-start" 
-                  value={holidayStart}
-                  onChange={(e) => setHolidayStart(e.target.value)}
-                  disabled={isPending}
-                  required
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" htmlFor="hol-end">End Date *</label>
-                <input 
-                  className="form-control" 
-                  type="date" 
-                  id="hol-end" 
-                  value={holidayEnd}
-                  onChange={(e) => setHolidayEnd(e.target.value)}
-                  disabled={isPending}
-                  required
-                />
-              </div>
-            </div>
-
-            <button className="btn btn-primary" type="submit" disabled={isPending} style={{ width: '100%' }}>
-              <Plus size={16} />
-              Add Holiday Range
-            </button>
-          </form>
-
-          {/* Holiday List */}
-          <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
-            <table className="table" style={{ fontSize: '0.8125rem' }}>
-              <thead>
-                <tr>
-                  <th>Holiday</th>
-                  <th>Dates</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {holidays.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--foreground-muted)' }}>No holidays added yet.</td>
-                  </tr>
-                ) : (
-                  holidays.map(hol => (
-                    <tr key={hol.id}>
-                      <td style={{ fontWeight: 600 }}>{hol.title}</td>
-                      <td>
-                        {hol.start_date === hol.end_date ? (
-                          hol.start_date
-                        ) : (
-                          `${hol.start_date} to ${hol.end_date}`
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button 
-                          type="button" 
-                          onClick={() => handleDeleteHoliday(hol.id, hol.title)}
-                          disabled={isPending}
-                          className="btn-danger-text"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
-        </div>
-
-        {/* Backups & Restore */}
-        <div className="card" style={{ backgroundColor: '#ffffff' }}>
-          <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Database size={20} />
-            Backups &amp; Restore
-          </h3>
-          <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-            Chuti automatically backs up the database on startup and every 12 hours. Restoring
-            replaces all current data with the selected backup — the app snapshots the current
-            state first so you can undo a wrong choice.
-          </p>
-
-          <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
-            <table className="table" style={{ fontSize: '0.8125rem' }}>
-              <thead>
-                <tr>
-                  <th>Backup</th>
-                  <th>Size</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {backups.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--foreground-muted)' }}>
-                      No backups yet. The first one is created automatically on the app&apos;s next startup.
-                    </td>
-                  </tr>
-                ) : (
-                  backups.map(bk => (
-                    <tr key={bk.name}>
-                      <td style={{ fontWeight: 600 }}>{new Date(bk.mtime).toLocaleString()}</td>
-                      <td>{formatBackupSize(bk.size)}</td>
-                      <td style={{ textAlign: 'right' }}>
+          <form onSubmit={submitHoliday} className="form-grid" style={{ marginBottom: '1rem' }}>
+            <Field label="Holiday name" htmlFor="hol-name" required>
+              <input id="hol-name" className="input" value={holiday.title} onChange={(e) => setHoliday((h) => ({ ...h, title: e.target.value }))} placeholder="e.g. Eid-ul-Fitr" disabled={isPending} required />
+            </Field>
+            <div className="form-grid cols-2">
+              <Field label="From" htmlFor="hol-start" required>
+                <input id="hol-start" className="input" type="date" value={holiday.start_date} onChange={(e) => setHoliday((h) => ({ ...h, start_date: e.target.value, end_date: h.end_date && h.end_date < e.target.value ? e.target.value : h.end_date }))} disabled={isPending} required />
+              </Field>
+              <Field label="To" htmlFor="hol-end" hint="Leave empty for one day.">
+                <input id="hol-end" className="input" type="date" value={holiday.end_date} min={holiday.start_date} onChange={(e) => setHoliday((h) => ({ ...h, end_date: e.target.value }))} disabled={isPending} aria-describedby="hol-end-hint" />
+              </Field>
+            </div>
+            <div><button type="submit" className="btn btn-secondary" disabled={isPending || !holiday.title || !holiday.start_date}><Plus size={16} aria-hidden /> Add holiday</button></div>
+          </form>
+          {holidays.length === 0 ? (
+            <EmptyState title="No holidays yet">Add public holidays so they aren&apos;t charged as leave.</EmptyState>
+          ) : (
+            <div className="table-wrap table-scroll">
+              <table className="table">
+                <tbody>
+                  {holidays.map((h) => (
+                    <tr key={h.id} className={h.end_date < today ? 'locked' : undefined}>
+                      <td className="primary-cell">{h.title}</td>
+                      <td className="nowrap">{formatDisplayRange(h.start_date, h.end_date)}</td>
+                      <td className="right">
                         <button
                           type="button"
-                          onClick={() => handleRestoreBackup(bk)}
+                          className="icon-btn danger"
+                          aria-label={`Delete holiday ${h.title}`}
                           disabled={isPending}
-                          className="btn-danger-text"
-                          title={`Restore backup from ${new Date(bk.mtime).toLocaleString()}`}
-                          aria-label={`Restore backup from ${new Date(bk.mtime).toLocaleString()}`}
+                          onClick={async () => {
+                            if (await confirm({ title: `Delete "${h.title}"?`, message: 'Leave already recorded over these dates keeps its current day count.', confirmText: 'Delete holiday', isDanger: true })) {
+                              run(() => deleteHoliday(h.id), `Deleted "${h.title}".`);
+                            }
+                          }}
                         >
-                          <RotateCcw size={14} />
+                          <Trash2 size={15} aria-hidden />
                         </button>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
+        {/* Departments */}
+        <section className="card" aria-labelledby="dept-title">
+          <div className="card-head"><h2 id="dept-title"><Briefcase size={18} aria-hidden /> Departments</h2></div>
+          <ul style={{ listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.9rem' }}>
+            {departments.map((d) => (
+              <li key={d.id} className="badge" style={{ padding: '0.25rem 0.3rem 0.25rem 0.65rem', fontSize: '0.85rem' }}>
+                {d.name} <span className="subtle num">({d.employees})</span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  style={{ width: 22, height: 22 }}
+                  aria-label={`Delete department ${d.name}`}
+                  title={d.employees > 0 ? 'Move its employees to another department first' : 'Delete'}
+                  disabled={isPending || d.employees > 0}
+                  onClick={() => run(() => deleteDepartment(d.id), `Deleted "${d.name}".`)}
+                >
+                  <X size={13} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <form onSubmit={submitDept} style={{ display: 'flex', gap: '0.5rem' }}>
+            <label htmlFor="dept-name" className="sr-only">New department name</label>
+            <input id="dept-name" className="input" value={deptName} onChange={(e) => setDeptName(e.target.value)} placeholder="New department, e.g. Science" disabled={isPending} />
+            <button type="submit" className="btn btn-secondary" disabled={isPending || !deptName.trim()}><Plus size={16} aria-hidden /> Add</button>
+          </form>
+        </section>
+
+        <BackupCopiesCard view={backupCopies} />
+
+        {/* Backups */}
+        <section className="card" aria-labelledby="backup-title">
+          <div className="card-head">
+            <div>
+              <h2 id="backup-title"><Database size={18} aria-hidden /> Quick restore points</h2>
+              <p>Database-only snapshots inside Chuti&apos;s data folder, saved on start-up and every 12 hours. The latest 30 are kept.</p>
+            </div>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={isPending} onClick={() => run(() => createBackupNow(), 'Backup saved.', () => router.refresh())}>
+              <HardDriveDownload size={14} aria-hidden /> Back up now
+            </button>
+          </div>
+          {backups.length === 0 ? (
+            <EmptyState title="No backups yet" />
+          ) : (
+            <div className="table-wrap table-scroll">
+              <table className="table">
+                <thead><tr><th>Saved</th><th>Kind</th><th className="num">Size</th><th className="right"><span className="sr-only">Restore</span></th></tr></thead>
+                <tbody>
+                  {backups.map((b) => (
+                    <tr key={b.name}>
+                      <td className="nowrap">{new Date(b.mtime).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                      <td>{BACKUP_KIND_LABEL[b.kind]}</td>
+                      <td className="num">{formatSize(b.size)}</td>
+                      <td className="right">
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onRestore(b)} disabled={isPending}>
+                          <RotateCcw size={14} aria-hidden /> Restore
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Data health */}
+        <section className="card" aria-labelledby="health-title">
+          <div className="card-head">
+            <div>
+              <h2 id="health-title"><Scale size={18} aria-hidden /> Balance check</h2>
+              <p>Recalculates every balance from the leave records and compares it with the stored total.</p>
+            </div>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={() => runCheck(false)} disabled={isPending}>Check balances</button>
+          {drift && (
+            <div style={{ marginTop: '0.9rem' }} className="form-grid">
+              {drift.length === 0 ? (
+                <Alert tone="success" live>All balances match the leave records.</Alert>
+              ) : (
+                <>
+                  <Alert tone="warning" live>{drift.length} stored value{drift.length === 1 ? '' : 's'} differ from the leave records.</Alert>
+                  <div className="table-wrap table-scroll">
+                    <table className="table">
+                      <thead><tr><th>Employee</th><th>Type</th><th className="num">Stored</th><th className="num">From records</th></tr></thead>
+                      <tbody>
+                        {drift.map((d, i) => (
+                          <tr key={i}>
+                            <td>{d.employeeName}</td>
+                            <td>{d.leaveType} {d.field === 'encashed_days' ? '(encashed)' : '(used)'}</td>
+                            <td className="num">{d.stored}</td>
+                            <td className="num"><strong>{d.expected}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div><button type="button" className="btn btn-primary" onClick={() => runCheck(true)} disabled={isPending}>Fix {drift.length} value{drift.length === 1 ? '' : 's'}</button></div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
       </div>
 
+      <Modal isOpen={yearOpen} onClose={() => setYearOpen(false)} labelledBy={yearTitle} maxWidth="620px" locked={isPending}>
+        <form onSubmit={submitYear} noValidate>
+          <DialogHeader id={yearTitle} title="Close the leave year" description="A backup is saved first. This cannot be undone except by restoring that backup." onClose={() => setYearOpen(false)} />
+          <div className="form-grid">
+            {yearError && <Alert tone="danger" live>{yearError}</Alert>}
+            <div className="form-grid cols-2">
+              <Field label="New leave year starts" htmlFor="new_year_start" required hint="Leave recorded from this date counts toward the new year.">
+                <input id="new_year_start" className="input" type="date" value={yearForm.new_year_start} onChange={(e) => setYearForm((f) => ({ ...f, new_year_start: e.target.value }))} disabled={isPending} aria-describedby="new_year_start-hint" />
+              </Field>
+              <Field label="EL carry-forward cap" htmlFor="year_cap" required>
+                <input
+                  id="year_cap"
+                  className="input num"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={yearForm.el_carry_cap}
+                  onChange={(e) => setYearForm((f) => ({ ...f, el_carry_cap: e.target.value }))}
+                  onBlur={() => loadYearPreview(Number(yearForm.el_carry_cap) || 0)}
+                  disabled={isPending}
+                />
+              </Field>
+            </div>
+            {yearPreview && (
+              <>
+                <Alert tone="info">
+                  {yearPreview.employees} active employee{yearPreview.employees === 1 ? '' : 's'} will carry {formatDays(yearPreview.carriedTotal)} of EL forward in total. Unused CL, SL and ML lapse.
+                </Alert>
+                <div className="table-wrap table-scroll">
+                  <table className="table">
+                    <thead><tr><th>Employee</th><th className="num">EL left now</th><th className="num">Carried</th></tr></thead>
+                    <tbody>
+                      {yearPreview.rows.map((r) => (
+                        <tr key={r.employeeCode}><td>{r.name}<span className="sub">{r.employeeCode}</span></td><td className="num">{r.elRemaining}</td><td className="num"><strong>{r.carried}</strong></td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            <Field label={<>Type <code>CLOSE</code> to confirm</>} htmlFor="year_confirm" required>
+              <input id="year_confirm" className="input" value={yearForm.confirm} onChange={(e) => setYearForm((f) => ({ ...f, confirm: e.target.value }))} autoComplete="off" disabled={isPending} />
+            </Field>
+          </div>
+          <div className="form-footer">
+            <button type="button" className="btn btn-secondary" onClick={() => setYearOpen(false)} disabled={isPending}>Cancel</button>
+            <button type="submit" className="btn btn-danger" disabled={isPending || yearForm.confirm !== 'CLOSE' || !yearForm.new_year_start}>{isPending ? 'Working…' : 'Close leave year'}</button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

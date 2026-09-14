@@ -39,8 +39,9 @@ You only need to install and run the application on **one host computer** (for e
 ## Core Administration Tasks
 
 ### Setting up the Password
-*   The default password is **`admin123`**.
-*   Change this immediately by navigating to **Console** -> **Settings** -> **Change Password**.
+*   A new installation starts with the password **`admin123`**.
+*   On first sign-in, Chuti asks you to replace it before you can continue. Use at least 8 characters.
+*   Change it later in **Settings → Admin password**. This signs out every other browser.
 
 ### Managing Employee Directories
 *   **Manual Entry:** Go to **Employees** -> **Add Employee**. Fill in their ID code, name, designation, joining date, and select their department. Phone number and email are optional contact fields.
@@ -48,19 +49,34 @@ You only need to install and run the application on **one host computer** (for e
 *   **Bulk CSV Import:** To import many employees at once, click **Download Template CSV** on the Employees page, fill in the columns using Microsoft Excel or Google Sheets, and click **Upload Employees from CSV**. The template has seven columns — EmployeeID, Name, Designation, Department, Phone, JoiningDate, and Email — where Email is optional and can be left blank. Older template files saved before Email was added (six columns) still import correctly.
 
 ### Recording Leaves
-1.  Go to **Leave Records** -> **Record A Leave**.
-2.  Select the employee, leave type, start/end dates, and state the reason.
-3.  **Attachments:** If you have a scanned medical certificate or physical application form, click the **Attachment** field to upload the document.
-4.  **Half-Days:** Check the **Is Half Day** option for half-day logs. The system automatically restricts the end date to match the start date.
+1.  Go to **Leave records** → **Record leave**.
+2.  Search for the employee by name or ID, then choose the leave type and dates.
+3.  Check the preview: it shows the days that will be charged and the balance before and after.
+4.  **Half days:** Tick **Half day**; only one date is needed.
+5.  **Attachments:** Upload a scanned certificate or application (PDF, image or Word, up to 10 MB).
+
+### Employee Statements
+Click an employee's name anywhere in Chuti to open their page: balances, every leave, encashment and late-arrival cut, and a **Print statement** button.
+
+### Closing the Leave Year
+At year end, open **Settings → Leave year → Close leave year**. Chuti saves a backup, carries unused Earned Leave forward up to the cap, lets unused CL/SL/ML lapse, and makes the closed year's records read-only.
 
 ---
 
 ## Backups & Data Security
 
-*   **WAL Mode Safeguards:** Chuti runs the local SQLite database in WAL (Write-Ahead Logging) mode. This actively prevents database corruption even if the host computer shuts down suddenly due to a power outage.
-*   **Auto-Backups:** The app automatically backs up your database to the `backups/` directory inside your chosen data folder every time it starts up. The system retains the last **30 backups** and deletes older ones to save disk space.
-*   **Manual Backups:** You can copy the `database.db` file from your data folder to a secure cloud drive or external backup drive at any time.
-*   **Restoring a Backup:** Go to **Console** -> **Settings** -> **Restore Backup**. You'll see a list of your automatic backups, each labeled with the date and time it was created. Select one and confirm to restore it. Chuti automatically saves a snapshot of your current database right before the restore happens, so if you pick the wrong one, that snapshot is available in the same list to undo the restore.
+*   **WAL Mode Safeguards:** Chuti runs the local SQLite database in WAL (Write-Ahead Logging) mode, which protects the database if the computer loses power.
+*   **Backup copies (recommended):** In **Settings → Backup copies**, choose **Choose backup folder…** on the computer running Chuti. Pick a USB drive, a second disk, or a Google Drive / OneDrive folder that syncs to the cloud. Chuti then saves a complete copy — database **and** attachments — every day at the time you set, and keeps the newest copies (30 by default). **Back up now** makes one immediately. The Overview page warns you if copies stop working, for example when the USB drive is unplugged.
+*   **Restoring a backup copy:** **Settings → Backup copies → Restore** next to a copy. Chuti checks the file for damage, saves a copy of your current data first, and puts the attachments back. To move to a new computer, install Chuti there, choose the same backup folder, and restore the newest copy.
+*   **Quick restore points:** Chuti also keeps database-only snapshots inside its own data folder, on every start-up and every 12 hours (latest 30). Restore them from **Settings → Quick restore points**. They live on the same drive as your data, so they are not a replacement for backup copies.
+*   **Protecting copies with a backup password (strongly recommended):** Before saving the first copy, Chuti asks you to choose. Select **Set a backup password** (at least 12 characters; a short sentence is ideal; not the admin password). Chuti then shows a **recovery code** once. Print it or write it down and keep it with important papers, not in the backup folder or the same cloud account. Every copy is then encrypted: someone who gets into your Google Drive / OneDrive or finds the USB drive cannot read it without the password or the recovery code.
+*   **After restarting Chuti** on the host computer, protected copies keep working automatically. If Settings says **Locked** (for example after moving to a new Windows account), choose **Unlock with password**.
+*   **Restoring a protected copy** asks for the backup password or the recovery code. Copies made before a password change need the old password, or the recovery code, which never changes.
+*   **Lost both the password and the recovery code?** Protected copies cannot be opened by anyone, including Chuti's developers. Keep the recovery code safe.
+*   Choosing **Save without a password** is possible, but anyone who gets a copy can read all staff data and attachments. If your backup folder syncs to the cloud, Chuti asks you to type `NO PASSWORD` to confirm.
+*   **Keep Chuti's data folder out of OneDrive, Google Drive and Dropbox.** Windows often puts "Documents" inside OneDrive. Chuti warns you if the data folder is synced, because the live database would be uploaded unencrypted and can be damaged by syncing. Use a local folder such as `C:\ChutiData`, and let Backup copies put encrypted copies in the cloud.
+*   **Balance check:** **Settings → Balance check** recalculates every balance from the leave records and fixes mismatches.
+*   **Activity log:** Every change is listed under **Activity log** with its time and the device that made it.
 
 ---
 

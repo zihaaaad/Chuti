@@ -1,268 +1,202 @@
-import { getDb } from '@/lib/db';
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Users, LogOut, Clock, CalendarDays } from 'lucide-react';
+import { CalendarClock, CalendarDays, CalendarPlus, CheckCircle2, Circle, Clock, UserMinus, Users, Wallet } from 'lucide-react';
+import { requireAdmin } from '@/lib/auth';
+import { getDb } from '@/lib/db';
+import { getSettings, readPolicy } from '@/lib/settings';
+import { addDays, currentMonthLocal, formatDisplayRange, monthBounds, todayLocal } from '@/lib/domain/dates';
+import { chargedDaysWithin } from '@/lib/domain/leave-days';
+import { ENCASHMENT_TYPE } from '@/lib/domain/leave-types';
+import { remainingSql } from '@/lib/domain/balance';
+import { Alert, EmptyState, LeaveTypeBadge, PageHeader, formatDays } from '@/components/ui';
+import { backupCopyHealth, readBackupCopyConfig } from '@/lib/backup-copies';
 import QuickLateForm from './QuickLateForm';
 import RefreshButton from './RefreshButton';
 
+export const metadata: Metadata = { title: 'Overview' };
+
 export default async function DashboardPage() {
+  await requireAdmin();
   const db = await getDb();
-  
-  const d = new Date();
-  const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const currentMonthStr = todayStr.substring(0, 7); // YYYY-MM
+  const settings = await getSettings();
 
-  // 1. Fetch Stats
-  const empStat = await db.get("SELECT COUNT(*) as count FROM employees WHERE status = 'Active'");
-  const totalEmployees = empStat?.count || 0;
+  const today = todayLocal();
+  const month = currentMonthLocal();
+  const { start: monthStart, end: monthEnd } = monthBounds(month);
+  const monthName = new Date(`${month}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long' });
 
-  const leaveStat = await db.get(
-    `SELECT COUNT(DISTINCT employee_id) as count FROM leave_records 
-     WHERE ? BETWEEN start_date AND end_date AND leave_type != 'Earned (Encashed)'`,
-    [todayStr]
-  );
-  const onLeaveToday = leaveStat?.count || 0;
+  const [employeeCount, holidayCount, onLeaveToday, upcoming, lwpRecords, lateTotal, employees] = await Promise.all([
+    db.get<{ count: number }>("SELECT COUNT(*) AS count FROM employees WHERE status = 'Active'"),
+    db.get<{ count: number }>('SELECT COUNT(*) AS count FROM holidays WHERE end_date >= ?', today),
+    db.all<{ id: number; employee_pk: number; name: string; designation: string; department: string | null; leave_type: string; start_date: string; end_date: string; actual_days: number }[]>(
+      `SELECT r.id, e.id AS employee_pk, e.name, e.designation, d.name AS department, r.leave_type, r.start_date, r.end_date, r.actual_days
+       FROM leave_records r JOIN employees e ON r.employee_id = e.id LEFT JOIN departments d ON e.department_id = d.id
+       WHERE ? BETWEEN r.start_date AND r.end_date AND r.leave_type != ?
+       ORDER BY e.name`,
+      today, ENCASHMENT_TYPE,
+    ),
+    db.all<{ id: number; employee_pk: number; name: string; leave_type: string; start_date: string; end_date: string; actual_days: number }[]>(
+      `SELECT r.id, e.id AS employee_pk, e.name, r.leave_type, r.start_date, r.end_date, r.actual_days
+       FROM leave_records r JOIN employees e ON r.employee_id = e.id
+       WHERE r.start_date > ? AND r.start_date <= ? AND r.leave_type != ?
+       ORDER BY r.start_date LIMIT 8`,
+      today, addDays(today, 14), ENCASHMENT_TYPE,
+    ),
+    db.all<{ start_date: string; end_date: string; actual_days: number }[]>(
+      "SELECT start_date, end_date, actual_days FROM leave_records WHERE leave_type = 'LWP' AND start_date <= ? AND end_date >= ?",
+      monthEnd, monthStart,
+    ),
+    db.get<{ total: number | null }>('SELECT SUM(late_count) AS total FROM late_deductions WHERE month_year = ?', month),
+    db.all<{ id: number; name: string; employee_id: string; department: string | null; cl_left: number | null }[]>(
+      `SELECT e.id, e.name, e.employee_id, d.name AS department, ${remainingSql('b')} AS cl_left
+       FROM employees e LEFT JOIN departments d ON d.id = e.department_id
+       LEFT JOIN leave_balances b ON e.id = b.employee_id AND b.leave_type = 'Casual'
+       WHERE e.status = 'Active' ORDER BY e.name`,
+    ),
+  ]);
 
-  const lwpStat = await db.get(
-    `SELECT SUM(actual_days) as total FROM leave_records 
-     WHERE leave_type = 'LWP' AND (start_date LIKE ? OR end_date LIKE ?)`,
-    [`${currentMonthStr}%`, `${currentMonthStr}%`]
-  );
-  const totalLWPThisMonth = lwpStat?.total || 0;
+  // LWP days that fall in this month only — a leave from 28 Aug to 3 Sep counts its September share.
+  const policy = await readPolicy(db, { start: monthStart, end: monthEnd });
+  const lwpThisMonth = lwpRecords.reduce((sum, r) => sum + chargedDaysWithin(r, monthStart, monthEnd, policy), 0);
+  const activeEmployees = employeeCount?.count ?? 0;
 
-  const lateStat = await db.get(
-    "SELECT SUM(late_count) as total FROM late_deductions WHERE month_year = ?",
-    [currentMonthStr]
-  );
-  const totalLatesThisMonth = lateStat?.total || 0;
+  const copyConfig = await readBackupCopyConfig(db);
+  const copyHealth = backupCopyHealth(copyConfig);
 
-  // 2. Fetch Active Absences (Who is on leave today)
-  const activeAbsences = await db.all(
-    `SELECT e.name, e.designation, d.name as department, r.leave_type, r.start_date, r.end_date, r.actual_days 
-     FROM leave_records r 
-     JOIN employees e ON r.employee_id = e.id 
-     LEFT JOIN departments d ON e.department_id = d.id
-     WHERE ? BETWEEN r.start_date AND r.end_date AND r.leave_type != 'Earned (Encashed)'
-     ORDER BY r.recorded_at DESC`,
-    [todayStr]
-  );
-
-  // 3. Fetch Recent Leaves (Last 5)
-  const recentLeaves = await db.all(
-    `SELECT r.id, e.name, e.employee_id as emp_code, r.leave_type, r.start_date, r.end_date, r.actual_days, r.recorded_at 
-     FROM leave_records r 
-     JOIN employees e ON r.employee_id = e.id 
-     ORDER BY r.recorded_at DESC 
-     LIMIT 5`
-  );
-
-  // 4. Fetch Employee List with CL Balance for Quick Form Selection
-  const employeesList = await db.all(`
-    SELECT 
-      e.id, 
-      e.name, 
-      e.employee_id,
-      (b.allocated_days - b.used_days) as cl_left
-    FROM employees e
-    LEFT JOIN leave_balances b ON e.id = b.employee_id AND b.leave_type = 'Casual'
-    WHERE e.status = 'Active'
-    ORDER BY e.name ASC
-  `);
+  const setupSteps = [
+    { done: settings.instituteName !== 'Chuti Leave Management', label: 'Set your organisation name', href: '/dashboard/settings' },
+    { done: (holidayCount?.count ?? 0) > 0, label: "Add this year's holidays", href: '/dashboard/settings#holidays' },
+    { done: activeEmployees > 0, label: 'Add or import employees', href: '/dashboard/employees' },
+    { done: copyHealth !== 'unset', label: 'Choose a folder for backup copies', href: '/dashboard/settings#backup-copies' },
+  ];
+  const setupIncomplete = setupSteps.some((s) => !s.done);
 
   return (
-    <div>
-      {/* Page Title */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--primary)' }}>Console Overview</h1>
-          <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)' }}>Quick statistics and daily tracking summary for {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+    <>
+      <PageHeader
+        title="Overview"
+        description={new Date(`${today}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        actions={
+          <>
+            <RefreshButton />
+            <Link href="/dashboard/leaves?new=1" className="btn btn-primary">
+              <CalendarPlus size={16} aria-hidden />
+              Record leave
+            </Link>
+          </>
+        }
+      />
+
+      {(copyHealth === 'failing' || copyHealth === 'overdue') && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <Alert tone={copyHealth === 'failing' ? 'danger' : 'warning'}>
+            {copyHealth === 'failing'
+              ? `The last backup copy failed${copyConfig.lastError ? `: ${copyConfig.lastError}` : '.'} `
+              : 'No backup copy has been saved in the last 48 hours. '}
+            <Link href="/dashboard/settings#backup-copies">Check backup copies</Link>
+          </Alert>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }} className="no-print">
-          <RefreshButton />
-          <Link href="/dashboard/leaves" className="btn btn-primary">
-            <CalendarDays size={16} />
-            Record A Leave
-          </Link>
+      )}
+
+      {setupIncomplete && (
+        <section className="card" style={{ marginBottom: '1.25rem' }} aria-labelledby="setup-title">
+          <div className="card-head">
+            <h2 id="setup-title">Finish setting up Chuti</h2>
+          </div>
+          <ul style={{ listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.5rem' }}>
+            {setupSteps.map((s) => (
+              <li key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {s.done ? <CheckCircle2 size={16} color="var(--success)" aria-label="Done" /> : <Circle size={16} color="var(--fg-subtle)" aria-label="To do" />}
+                {s.done ? <span className="muted">{s.label}</span> : <Link href={s.href}>{s.label}</Link>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="stats">
+        <div className="card stat">
+          <span className="stat-icon"><Users size={20} aria-hidden /></span>
+          <div><div className="stat-value">{activeEmployees}</div><div className="stat-label">Active employees</div></div>
+        </div>
+        <div className="card stat">
+          <span className="stat-icon info"><UserMinus size={20} aria-hidden /></span>
+          <div><div className="stat-value">{new Set(onLeaveToday.map((a) => a.employee_pk)).size}</div><div className="stat-label">On leave today</div></div>
+        </div>
+        <div className="card stat">
+          <span className="stat-icon danger"><Wallet size={20} aria-hidden /></span>
+          <div><div className="stat-value">{formatDays(lwpThisMonth)}</div><div className="stat-label">Unpaid leave in {monthName}</div></div>
+        </div>
+        <div className="card stat">
+          <span className="stat-icon warning"><Clock size={20} aria-hidden /></span>
+          <div><div className="stat-value">{lateTotal?.total ?? 0}</div><div className="stat-label">Late arrivals in {monthName}</div></div>
         </div>
       </div>
 
-      {/* Stats Cards Grid */}
-      <div className="dashboard-grid">
-        <div className="card stat-card">
-          <div className="stat-icon">
-            <Users size={24} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-value">{totalEmployees}</span>
-            <span className="stat-label">Active Employees</span>
-          </div>
-        </div>
-
-        <div className="card stat-card">
-          <div className="stat-icon" style={{ color: 'var(--success)', backgroundColor: 'var(--success-bg)' }}>
-            <CalendarDays size={24} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-value" style={{ color: 'var(--success)' }}>{onLeaveToday}</span>
-            <span className="stat-label">On Leave Today</span>
-          </div>
-        </div>
-
-        <div className="card stat-card">
-          <div className="stat-icon" style={{ color: 'var(--error)', backgroundColor: 'var(--error-bg)' }}>
-            <LogOut size={24} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-value" style={{ color: 'var(--error)' }}>{totalLWPThisMonth} Days</span>
-            <span className="stat-label">LWP This Month</span>
-          </div>
-        </div>
-
-        <div className="card stat-card">
-          <div className="stat-icon" style={{ color: 'var(--warning)', backgroundColor: 'var(--warning-bg)' }}>
-            <Clock size={24} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-value" style={{ color: 'var(--warning)' }}>{totalLatesThisMonth}</span>
-            <span className="stat-label">Late Arrivals ({new Date().toLocaleString('en-US', { month: 'short' })})</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Grid Content */}
-      <div className="dashboard-layout-grid">
-        
-        {/* Left Side: Active Absences and Recent Leaves */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Active Absences (Today's Leaves) */}
-          <div className="card">
-            <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--success)' }}></span>
-              Absent Today
-            </h3>
-            
-            {activeAbsences.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '2rem 1rem', color: 'var(--foreground-muted)' }}>
-                <CalendarDays size={32} style={{ opacity: 0.3 }} />
-                <span style={{ fontSize: '0.875rem' }}>All employees are present today. No absences logged.</span>
-              </div>
+      <div className="grid-main-aside">
+        <div className="stack">
+          <section className="card" aria-labelledby="today-title">
+            <div className="card-head"><h2 id="today-title"><CalendarDays size={18} aria-hidden /> On leave today</h2></div>
+            {onLeaveToday.length === 0 ? (
+              <EmptyState title="No leave recorded for today">Anyone absent without a leave record will not appear here.</EmptyState>
             ) : (
-              <div className="table-container">
+              <div className="table-wrap">
                 <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Designation</th>
-                      <th>Leave Type</th>
-                      <th>Duration</th>
-                      <th>Period</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Employee</th><th>Type</th><th>Period</th><th className="num">Days</th></tr></thead>
                   <tbody>
-                    {activeAbsences.map((abs, i) => (
-                      <tr key={i}>
-                        <td style={{ fontWeight: '600' }}>{abs.name}</td>
-                        <td>{abs.designation}</td>
-                        <td>
-                          <span className={`badge ${
-                            abs.leave_type === 'Casual' ? 'badge-success' : 
-                            abs.leave_type === 'Sick' ? 'badge-info' : 
-                            abs.leave_type === 'LWP' ? 'badge-danger' : 'badge-warning'
-                          }`}>
-                            {abs.leave_type}
-                          </span>
-                        </td>
-                        <td>{abs.actual_days} days</td>
-                        <td style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-                          {abs.start_date} to {abs.end_date}
-                        </td>
+                    {onLeaveToday.map((a) => (
+                      <tr key={a.id}>
+                        <td className="primary-cell"><Link href={`/dashboard/employees/${a.employee_pk}`}>{a.name}</Link><span className="sub">{a.designation}{a.department ? ` · ${a.department}` : ''}</span></td>
+                        <td><LeaveTypeBadge type={a.leave_type} /></td>
+                        <td className="nowrap">{formatDisplayRange(a.start_date, a.end_date)}</td>
+                        <td className="num">{a.actual_days}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Recent Leaves Log */}
-          <div className="card">
-            <h3 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Recently Logged Leaves</h3>
-            {recentLeaves.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '2rem 1rem', color: 'var(--foreground-muted)' }}>
-                <Clock size={32} style={{ opacity: 0.3 }} />
-                <span style={{ fontSize: '0.875rem' }}>No leave records registered yet.</span>
-              </div>
+          <section className="card" aria-labelledby="upcoming-title">
+            <div className="card-head"><h2 id="upcoming-title"><CalendarClock size={18} aria-hidden /> Starting in the next 14 days</h2></div>
+            {upcoming.length === 0 ? (
+              <EmptyState title="No upcoming leave" />
             ) : (
-              <div className="table-container">
+              <div className="table-wrap">
                 <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Type</th>
-                      <th>Days</th>
-                      <th>Period</th>
-                      <th>Recorded At</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Employee</th><th>Type</th><th>Period</th><th className="num">Days</th></tr></thead>
                   <tbody>
-                    {recentLeaves.map((record) => (
-                      <tr key={record.id}>
-                        <td>
-                          <div style={{ fontWeight: '600' }}>{record.name}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>{record.emp_code}</div>
-                        </td>
-                        <td>
-                          <span className={`badge ${
-                            record.leave_type.startsWith('Casual') ? 'badge-success' : 
-                            record.leave_type.startsWith('Sick') ? 'badge-info' : 
-                            record.leave_type.startsWith('LWP') ? 'badge-danger' : 'badge-warning'
-                          }`}>
-                            {record.leave_type}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 500 }}>{record.actual_days} days</td>
-                        <td style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-                          {record.start_date} to {record.end_date}
-                        </td>
-                        <td style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-                          {new Date(record.recorded_at.replace(' ', 'T') + 'Z').toLocaleDateString()}
-                        </td>
+                    {upcoming.map((u) => (
+                      <tr key={u.id}>
+                        <td className="primary-cell"><Link href={`/dashboard/employees/${u.employee_pk}`}>{u.name}</Link></td>
+                        <td><LeaveTypeBadge type={u.leave_type} /></td>
+                        <td className="nowrap">{formatDisplayRange(u.start_date, u.end_date)}</td>
+                        <td className="num">{u.actual_days}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
-
+          </section>
         </div>
 
-        {/* Right Side: Quick Action Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Quick Late Attendance Logger */}
-          <div className="card">
-            <h3 style={{ fontSize: '1.125rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Clock size={18} />
-              Quick Late Logger
-            </h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginBottom: '1.25rem' }}>
-              Record late entries for CL deduction calculation.
-            </p>
-            <QuickLateForm employees={employeesList} currentMonth={currentMonthStr} />
-          </div>
-
-          {/* Quick Info Box */}
-          <div className="card" style={{ backgroundColor: 'var(--primary-light)', borderColor: 'rgba(27, 58, 36, 0.1)' }}>
-            <h4 style={{ fontSize: '0.875rem', color: 'var(--primary)', marginBottom: '0.5rem', fontWeight: 600 }}>Deduction Policy Reminder</h4>
-            <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', lineHeight: '1.4' }}>
-              According to current system configurations, Casual Leave (CL) is auto-deducted at the specified threshold (default: 3 late arrivals = 1 CL day deduction). Verify details or change settings in the Settings panel.
-            </p>
-          </div>
-
-        </div>
-
+        <aside className="stack">
+          <section className="card" aria-labelledby="late-title">
+            <div className="card-head">
+              <div>
+                <h2 id="late-title"><Clock size={18} aria-hidden /> Late arrivals</h2>
+                <p>
+                  Every {settings.lateThreshold} late arrivals in a month cut 1 day of Casual Leave.{' '}
+                  <Link href="/dashboard/settings">Change</Link>
+                </p>
+              </div>
+            </div>
+            <QuickLateForm employees={employees} currentMonth={month} threshold={settings.lateThreshold} />
+          </section>
+        </aside>
       </div>
-    </div>
+    </>
   );
 }

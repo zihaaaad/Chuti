@@ -47,7 +47,13 @@ database.db-wal
 database.db-shm
 /backups
 /pre_update_backups
+/uploads
 /public/uploads
+# temporary files from backup copies and restores
+.snapshot-*
+.backup-work-*
+.restore-*
+.verify_*
 
 # Electron build output
 /dist

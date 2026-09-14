@@ -1,79 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
-import { isAuthenticated } from '@/lib/auth';
+import { verifySession } from '@/lib/auth';
+import { ATTACHMENT_TYPES, uploadsDir } from '@/lib/attachments';
 
-// This API route serves uploaded files from the user-selected APP_DATA_DIR.
-// It replaces the old approach of storing files in /public/uploads, which
-// would be read-only in a packaged Electron installation.
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ filename: string }> }
-) {
-  // Attachments are leave-request evidence (sick notes, IDs, etc.) — require the same
-  // admin session the rest of the dashboard requires, so they aren't world-readable to
-  // anyone who can reach this port on the LAN.
-  if (!(await isAuthenticated())) {
+// Serves leave attachments (sick notes, application scans) from the data
+// folder. They are personal documents: admin session required, never cached
+// by shared caches, and never sniffed into a different content type.
+export async function GET(request: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
+  if (!(await verifySession())) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
   const { filename } = await params;
-
-  // Sanitize filename to prevent directory traversal attacks
   const safeName = path.basename(filename);
-  if (!safeName || safeName !== filename) {
+  if (!safeName || safeName !== filename || safeName.startsWith('.')) {
     return new NextResponse('Bad Request', { status: 400 });
   }
 
-  // Resolve the uploads directory from the environment variable or fall back to cwd
-  const dataDir = process.env.APP_DATA_DIR || process.cwd();
-  const uploadsDir = process.env.APP_DATA_DIR
-    ? path.join(dataDir, 'uploads')
-    : path.join(dataDir, 'public', 'uploads');
-
-  const filePath = path.join(uploadsDir, safeName);
-
-  // Verify the resolved path is still inside the uploads directory (belt-and-suspenders check)
-  if (!filePath.startsWith(uploadsDir)) {
+  const dir = uploadsDir();
+  const filePath = path.join(dir, safeName);
+  if (!filePath.startsWith(dir + path.sep)) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  if (!fs.existsSync(filePath)) {
+  const contentType = ATTACHMENT_TYPES[path.extname(safeName).toLowerCase()];
+  if (!contentType) {
     return new NextResponse('Not Found', { status: 404 });
   }
 
+  let fileBuffer: Buffer;
   try {
-    const fileBuffer = await fs.promises.readFile(filePath);
-    const ext = path.extname(safeName).toLowerCase();
-
-    const mimeTypes: Record<string, string> = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-      '.pdf': 'application/pdf',
-      '.doc': 'application/msword',
-      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    };
-
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': String(fileBuffer.length),
-        // Allow inline display for images/pdf, force download for others
-        'Content-Disposition': contentType.startsWith('image/') || contentType === 'application/pdf'
-          ? `inline; filename="${safeName}"`
-          : `attachment; filename="${safeName}"`,
-        // Cache for 1 hour — files are immutable once uploaded
-        'Cache-Control': 'public, max-age=3600',
-      },
-    });
+    fileBuffer = await fs.promises.readFile(filePath);
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return new NextResponse('Not Found', { status: 404 });
     console.error('Failed to serve upload:', err);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
+
+  const inline = contentType.startsWith('image/') || contentType === 'application/pdf';
+  const download = request.nextUrl.searchParams.get('download') === '1';
+  return new NextResponse(new Uint8Array(fileBuffer), {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': String(fileBuffer.length),
+      'Content-Disposition': `${inline && !download ? 'inline' : 'attachment'}; filename="${safeName}"`,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 }

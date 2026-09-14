@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { useId, useState } from 'react';
 import Modal from './Modal';
+import { DialogHeader } from './ui';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -16,6 +16,8 @@ interface ConfirmDialogProps {
   confirmInputText?: string;
 }
 
+// Mounted with a fresh `key` each time it opens (see ConfirmContext), so the
+// typed-confirmation input always starts empty.
 export default function ConfirmDialog({
   isOpen,
   title,
@@ -25,101 +27,42 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   isDanger = false,
-  confirmInputText
+  confirmInputText,
 }: ConfirmDialogProps) {
-  const [inputValue, setInputValue] = useState('');
-
-  React.useEffect(() => {
-    if (isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setInputValue('');
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
-  const isConfirmDisabled = confirmInputText ? inputValue !== confirmInputText : false;
+  const [typed, setTyped] = useState('');
+  const titleId = useId();
+  const inputId = useId();
+  const blocked = !!confirmInputText && typed.trim() !== confirmInputText;
 
   return (
-    <Modal isOpen={isOpen} onClose={onCancel} maxWidth="400px" zIndex={100000} labelledBy="confirm-dialog-title">
-      <div style={{ padding: '1.5rem' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '2.5rem',
-            height: '2.5rem',
-            borderRadius: '50%',
-            backgroundColor: isDanger ? 'var(--error-bg)' : 'var(--success-bg)',
-            color: isDanger ? 'var(--error)' : 'var(--success)'
-          }}>
-            <AlertTriangle size={20} />
-          </div>
-          <h3 id="confirm-dialog-title" style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--primary)', flex: 1 }}>{title}</h3>
-          <button
-            onClick={onCancel}
-            className="btn-close"
-            style={{ padding: '0.25rem' }}
-            aria-label="Close dialog"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Message */}
-        <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1.25rem', lineHeight: '1.5' }}>
-          {message}
-        </p>
-
-        {/* Optional Input Confirmation */}
-        {confirmInputText && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label htmlFor="confirm-dialog-input" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.5rem', display: 'block' }}>
-              Please type <strong style={{ color: 'var(--error)' }}>{confirmInputText}</strong> to confirm:
-            </label>
-            <input
-              id="confirm-dialog-input"
-              type="text"
-              className="form-control"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder={confirmInputText}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.75rem',
-                fontSize: '0.875rem',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border)',
-                outline: 'none'
-              }}
-            />
-          </div>
-        )}
-
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-          <button
-            onClick={onCancel}
-            className="btn btn-secondary"
-            style={{ padding: '0.5rem 1rem' }}
-          >
-            {cancelText}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isConfirmDisabled}
-            className={isDanger ? 'btn btn-danger' : 'btn btn-primary'}
-            style={{
-              padding: '0.5rem 1rem',
-              opacity: isConfirmDisabled ? 0.5 : 1,
-              cursor: isConfirmDisabled ? 'not-allowed' : 'pointer'
+    <Modal isOpen={isOpen} onClose={onCancel} maxWidth="440px" zIndex={1100} labelledBy={titleId}>
+      <DialogHeader id={titleId} title={title} onClose={onCancel} />
+      <p style={{ marginBottom: '1rem' }}>{message}</p>
+      {confirmInputText && (
+        <div className="field" style={{ marginBottom: '0.5rem' }}>
+          <label className="field-label" htmlFor={inputId}>
+            Type <strong>{confirmInputText}</strong> to confirm
+          </label>
+          <input
+            id={inputId}
+            className="input"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off"
+            data-autofocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !blocked) onConfirm();
             }}
-          >
-            {confirmText}
-          </button>
+          />
         </div>
+      )}
+      <div className="form-footer">
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          {cancelText}
+        </button>
+        <button type="button" className={`btn ${isDanger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} disabled={blocked}>
+          {confirmText}
+        </button>
       </div>
     </Modal>
   );

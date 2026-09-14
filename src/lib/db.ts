@@ -1,49 +1,223 @@
+import 'server-only';
 import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
+import { open, type Database } from 'sqlite';
 import path from 'path';
 import fs from 'fs';
-import bcrypt from 'bcryptjs';
+import { runMigrations } from './migrations';
+import { singleton } from './singleton';
 
-// Setup database file path (Supports Electron APP_DATA_DIR)
+// Data lives in the Electron-selected APP_DATA_DIR, or the project folder when
+// run from source (start.bat / npm start).
 const dataDir = process.env.APP_DATA_DIR || process.cwd();
 const DB_PATH = path.join(dataDir, 'database.db');
 const BACKUP_DIR = path.join(dataDir, 'backups');
+const MAX_BACKUPS = 30;
+const BACKUP_PREFIX = 'database_backup_';
 
-// Bump this when a future migration needs a cheap "has this DB already been
-// migrated" check instead of probing column existence. Starting at 1 covers
-// every schema shape this file already knows how to migrate as of this
-// change — it does not itself represent a new migration.
-const CURRENT_SCHEMA_VERSION = 1;
+export type { Database };
 
-// We cache the in-flight initialization PROMISE, not just the resolved
-// instance. If we only cached the resolved instance, two requests that both
-// arrive before the first `getDb()` call finishes (very plausible on a cold
-// start — Next.js can render a layout and page concurrently, and this app is
-// explicitly designed for multiple simultaneous LAN users) would each see a
-// null instance and independently re-run the full schema/migration sequence,
-// including destructive DROP TABLE + RENAME steps. Caching the promise
-// ensures the expensive init logic below only ever runs once per process.
-let dbPromise: Promise<Database> | null = null;
+// ─── Connection ──────────────────────────────────────────────────────────────
+// All connection state is process-wide (see singleton.ts): Next.js may load
+// this module in several bundles, and there must still be exactly one
+// connection, one write lock and one swap gate.
+const state = singleton('db', () => ({
+  // The in-flight initialization PROMISE, not the resolved instance, so
+  // concurrent cold-start requests share one init instead of each running the
+  // migrations (which include DROP TABLE + RENAME steps).
+  dbPromise: null as Promise<Database> | null,
+  backupIntervalScheduled: false,
+  // Set while a restore swaps the database file. Queries wait for it, so nobody
+  // reopens the file mid-swap (on Windows an open handle makes the old WAL file
+  // impossible to delete) or runs a query on the connection being closed.
+  swapGate: null as Promise<void> | null,
+  inFlight: 0,
+  lockTail: Promise.resolve() as Promise<void>,
+}));
 
-// Clean up old backups keeping only the last 30
+export function getPaths() {
+  return { DB_PATH, BACKUP_DIR, DATA_DIR: dataDir };
+}
+
+async function connection(): Promise<Database> {
+  while (state.swapGate) await state.swapGate;
+  if (!state.dbPromise) {
+    state.dbPromise = initializeDb().catch((err) => {
+      state.dbPromise = null;
+      throw err;
+    });
+  }
+  return state.dbPromise;
+}
+
+const QUERY_METHODS = new Set(['get', 'all', 'run', 'exec', 'each']);
+
+/**
+ * The handle every caller receives. Each query goes to the live connection at
+ * the moment it runs, so a handle obtained before a restore keeps working after
+ * it, and a restore can wait for queries already running to finish.
+ */
+const handle = new Proxy({} as Database, {
+  get(_target, prop) {
+    if (typeof prop === 'string' && QUERY_METHODS.has(prop)) {
+      return async (...args: unknown[]) => {
+        for (;;) {
+          const conn = await connection();
+          if (state.swapGate) continue; // a swap started while we waited: wait for it
+          state.inFlight++;
+          try {
+            return await (conn as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[prop](...args);
+          } finally {
+            state.inFlight--;
+          }
+        }
+      };
+    }
+    // Not a thenable, and no other members are part of the supported surface.
+    return undefined;
+  },
+});
+
+export async function getDb(): Promise<Database> {
+  await connection(); // surface initialization/migration errors to the caller
+  return handle;
+}
+
+async function initializeDb(): Promise<Database> {
+  backupDatabase();
+  if (!state.backupIntervalScheduled) {
+    setInterval(() => void checkpointedBackup(), 12 * 60 * 60 * 1000).unref?.();
+    state.backupIntervalScheduled = true;
+  }
+
+  const db = await open({ filename: DB_PATH, driver: sqlite3.Database });
+  await db.exec('PRAGMA journal_mode=WAL;');
+  await db.exec('PRAGMA busy_timeout=5000;');
+
+  // Table rebuilds in migrations must not fire ON DELETE CASCADE: with
+  // foreign keys on, `DROP TABLE employees` deletes every leave record.
+  await db.exec('PRAGMA foreign_keys=OFF;');
+  try {
+    await runMigrations(db);
+  } finally {
+    await db.exec('PRAGMA foreign_keys=ON;');
+  }
+  return db;
+}
+
+// ─── Write serialization ─────────────────────────────────────────────────────
+// Every request shares ONE SQLite connection, and SQLite transactions belong to
+// the connection, not the request. Without serialization, request B's BEGIN
+// fails inside request A's open transaction and B's error handler ROLLBACKs
+// A's work. All writes therefore go through this FIFO lock.
+async function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => (release = resolve));
+  const previous = state.lockTail;
+  state.lockTail = previous.then(() => next);
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+/** An expected, user-facing failure. Its message is safe to show; it rolls the transaction back. */
+export class ActionError extends Error {
+  /** Optional machine-readable reason the UI can react to (e.g. 'SECRET_REQUIRED'). */
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'ActionError';
+    this.code = code;
+  }
+}
+
+/**
+ * Runs `fn` inside `BEGIN IMMEDIATE … COMMIT`, serialized with every other
+ * write. Throwing (including an ActionError) rolls back. Do not call
+ * withTransaction from inside `fn` — pass the `db` handle down instead.
+ */
+export async function withTransaction<T>(fn: (db: Database) => Promise<T>): Promise<T> {
+  const db = await getDb();
+  return withLock(async () => {
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = await fn(db);
+      await db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await db.exec('ROLLBACK');
+      } catch {
+        // No transaction left to roll back (e.g. SQLite already aborted it).
+      }
+      throw err;
+    }
+  });
+}
+
+/** Exclusive access without a transaction — for connection close/restore and WAL checkpoints. */
+export async function withExclusiveAccess<T>(fn: () => Promise<T>): Promise<T> {
+  return withLock(fn);
+}
+
+/** Closes the connection. Call only inside withExclusiveAccess, or at shutdown. */
+export async function closeDbUnlocked(): Promise<void> {
+  if (!state.dbPromise) return;
+  const pending = state.dbPromise;
+  state.dbPromise = null;
+  try {
+    await (await pending).close();
+  } catch {
+    // Initialization never succeeded, so there is nothing to close.
+  }
+}
+
+/**
+ * Replaces the live database file. Waits for in-flight writes and queries,
+ * closes the connection, holds every new query until `swap` finishes, then the
+ * next query reopens (and migrates) the new file.
+ */
+export async function swapDatabaseFile(swap: (paths: { DB_PATH: string }) => void | Promise<void>): Promise<void> {
+  await withLock(async () => {
+    let open!: () => void;
+    state.swapGate = new Promise<void>((resolve) => (open = resolve));
+    try {
+      const deadline = Date.now() + 10_000;
+      while (state.inFlight > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 5));
+      await closeDbUnlocked();
+      for (const suffix of ['-wal', '-shm']) {
+        // Antivirus or backup tools can hold a handle briefly on Windows; retry.
+        fs.rmSync(DB_PATH + suffix, { force: true, maxRetries: 10, retryDelay: 100 });
+      }
+      await swap({ DB_PATH });
+    } finally {
+      state.swapGate = null;
+      open();
+    }
+  });
+}
+
+// ─── Backups ─────────────────────────────────────────────────────────────────
+export function listBackupFiles(): { name: string; size: number; mtime: Date }[] {
+  if (!fs.existsSync(BACKUP_DIR)) return [];
+  return fs
+    .readdirSync(BACKUP_DIR)
+    .filter((f) => f.startsWith(BACKUP_PREFIX) && f.endsWith('.db'))
+    .map((name) => {
+      const stat = fs.statSync(path.join(BACKUP_DIR, name));
+      return { name, size: stat.size, mtime: stat.mtime };
+    })
+    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+}
+
 function rotateBackups() {
   try {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-      return;
-    }
-    const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith('database_backup_') && f.endsWith('.db'))
-      .map(f => ({
-        name: f,
-        time: fs.statSync(path.join(BACKUP_DIR, f)).mtime.getTime()
-      }))
-      .sort((a, b) => b.time - a.time); // Descending order (newest first)
-
-    if (files.length > 30) {
-      const toDelete = files.slice(30);
-      for (const file of toDelete) {
-        fs.unlinkSync(path.join(BACKUP_DIR, file.name));
+    for (const file of listBackupFiles().slice(MAX_BACKUPS)) {
+      for (const suffix of ['', '-wal', '-shm']) {
+        const p = path.join(BACKUP_DIR, file.name + suffix);
+        if (fs.existsSync(p)) fs.unlinkSync(p);
       }
     }
   } catch (err) {
@@ -51,332 +225,55 @@ function rotateBackups() {
   }
 }
 
-// Perform database backup
-function backupDatabase() {
+function copyWithSidecars(sourceDb: string, targetDb: string) {
+  fs.copyFileSync(sourceDb, targetDb);
+  for (const suffix of ['-wal', '-shm']) {
+    if (fs.existsSync(sourceDb + suffix)) fs.copyFileSync(sourceDb + suffix, targetDb + suffix);
+  }
+}
+
+/** Copies the database into backups/ with a timestamped name. Returns the file name, or null. */
+export function backupDatabase(label = ''): string | null {
   try {
-    if (fs.existsSync(DB_PATH)) {
-      if (!fs.existsSync(BACKUP_DIR)) {
-        fs.mkdirSync(BACKUP_DIR, { recursive: true });
-      }
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupPath = path.join(BACKUP_DIR, `database_backup_${timestamp}.db`);
-      fs.copyFileSync(DB_PATH, backupPath);
-      
-      const walPath = DB_PATH + '-wal';
-      if (fs.existsSync(walPath)) {
-        fs.copyFileSync(walPath, backupPath + '-wal');
-      }
-      
-      const shmPath = DB_PATH + '-shm';
-      if (fs.existsSync(shmPath)) {
-        fs.copyFileSync(shmPath, backupPath + '-shm');
-      }
-      
-      console.log(`Database backup created successfully at: ${backupPath}`);
-      rotateBackups();
-    }
+    if (!fs.existsSync(DB_PATH)) return null;
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const name = `${BACKUP_PREFIX}${label ? `${label}_` : ''}${timestamp}.db`;
+    copyWithSidecars(DB_PATH, path.join(BACKUP_DIR, name));
+    rotateBackups();
+    return name;
   } catch (err) {
     console.error('Database backup failed:', err);
+    return null;
   }
 }
 
-// Same protective copy as backupDatabase(), but for the periodic 12-hourly
-// backup where a live connection is already open and may have writes
-// in-flight or sitting un-checkpointed in the WAL file. A plain copy of
-// database.db + database.db-wal + database.db-shm is only a complete,
-// consistent snapshot if nothing is actively writing between the three
-// copies; checkpointing first collapses the WAL into the main database file
-// so the copy of database.db alone is already a self-contained, correct
-// snapshot regardless of what happens to the (now-empty) WAL file after.
-// The startup call to backupDatabase() below doesn't need this: it runs
-// before we've opened our own connection, and the single-instance lock in
-// main.js means no other process should be writing to it at that moment.
-async function checkpointedBackup() {
-  try {
-    if (dbPromise) {
-      const db = await dbPromise;
-      await db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+/**
+ * Backup taken while the connection is live: checkpoint the WAL into the main
+ * file under the write lock so the copy is a consistent snapshot.
+ */
+export async function checkpointedBackup(label = ''): Promise<string | null> {
+  return withLock(async () => {
+    if (state.dbPromise) {
+      try {
+        const db = await state.dbPromise;
+        await db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      } catch (err) {
+        console.error('Pre-backup WAL checkpoint failed, backing up as-is:', err);
+      }
     }
-  } catch (err) {
-    console.error('Pre-backup WAL checkpoint failed, backing up as-is:', err);
-  }
-  backupDatabase();
-}
-
-// Exposes the resolved DB/backup paths so other modules (e.g. the restore-from-backup
-// action) can locate backup files without recomputing APP_DATA_DIR logic themselves.
-export function getPaths() {
-  return { DB_PATH, BACKUP_DIR };
-}
-
-// Closes the live connection so its file can be safely overwritten (used by restore-from-backup).
-// The next getDb() call transparently reopens at DB_PATH.
-//
-// NOTE: this awaits `dbPromise` itself (not a separate `dbInstance` variable —
-// see the promise-caching comment above `dbPromise`) so it correctly waits out
-// an in-flight initialization instead of racing it, and always clears the
-// cached promise afterwards so the next getDb() call reopens fresh rather than
-// returning a promise that already resolved to a now-closed connection.
-export async function closeDb(): Promise<void> {
-  if (!dbPromise) return;
-  const pending = dbPromise;
-  dbPromise = null;
-  try {
-    const db = await pending;
-    await db.close();
-  } catch {
-    // Initialization never succeeded, so there's no open connection to close.
-  }
-}
-
-export async function getDb(): Promise<Database> {
-  if (!dbPromise) {
-    // Assign synchronously (before any `await`) so concurrent callers see the
-    // same in-flight promise instead of each starting their own init.
-    dbPromise = initializeDb().catch((err) => {
-      // If init fails, clear the cached promise so a later call can retry
-      // instead of every future getDb() call rejecting forever.
-      dbPromise = null;
-      throw err;
-    });
-  }
-  return dbPromise;
-}
-
-let backupIntervalScheduled = false;
-
-async function initializeDb(): Promise<Database> {
-  // Backup the database on startup before opening the connection.
-  backupDatabase();
-  // Schedule periodic backup every 12 hours (43200000 ms). Guarded so that a
-  // restore-from-backup (which closes and reopens the connection, re-running
-  // this function) doesn't stack up a new interval timer on every restore.
-  if (!backupIntervalScheduled) {
-    setInterval(checkpointedBackup, 12 * 60 * 60 * 1000);
-    backupIntervalScheduled = true;
-  }
-
-  // Open the database
-  const db = await open({
-    filename: DB_PATH,
-    driver: sqlite3.Database
+    return backupDatabase(label);
   });
-
-  // Enable WAL (Write-Ahead Logging) mode
-  await db.exec('PRAGMA journal_mode=WAL;');
-
-  // Enable Foreign Key support
-  await db.exec('PRAGMA foreign_keys=ON;');
-
-  // Set busy timeout to 5000ms to prevent locked exceptions during concurrent requests
-  await db.exec('PRAGMA busy_timeout=5000;');
-
-  // Create tables if they do not exist
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS system_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS holidays (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS departments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL
-    );
-  `);
-
-  // Create or migrate employees table to use department_id
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS employees (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      employee_id TEXT UNIQUE NOT NULL,
-      department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
-      designation TEXT NOT NULL,
-      email TEXT UNIQUE,
-      join_date TEXT NOT NULL,
-      phone TEXT,
-      status TEXT DEFAULT 'Active'
-    )
-  `);
-
-  // Run safe schema migrations for employees table before data migrations
-  try { await db.exec('ALTER TABLE employees ADD COLUMN phone TEXT;'); } catch {}
-  try { await db.exec('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active";'); } catch {}
-
-
-  // Schema Migration: Convert text 'department' column to 'department_id' foreign key if needed
-  const columns = await db.all("PRAGMA table_info(employees)");
-  const hasTextDepartment = columns.some((col: any) => col.name === 'department');
-  if (hasTextDepartment) {
-    console.log("Migrating employees table from text 'department' to 'department_id'...");
-    
-    // Ensure all text departments exist in departments table
-    const uniqueDepts = await db.all("SELECT DISTINCT department FROM employees WHERE department IS NOT NULL");
-    for (const row of uniqueDepts) {
-      await db.run("INSERT OR IGNORE INTO departments (name) VALUES (?)", row.department);
-    }
-
-    // Check if phone exists in old table
-    const hasPhone = columns.some((col: any) => col.name === 'phone');
-
-    // Create new table
-    await db.exec(`
-      CREATE TABLE employees_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        employee_id TEXT UNIQUE NOT NULL,
-        department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
-        designation TEXT NOT NULL,
-        email TEXT UNIQUE,
-        join_date TEXT NOT NULL,
-        phone TEXT,
-        status TEXT DEFAULT 'Active'
-      )
-    `);
-
-    // Copy data mapping text names to IDs
-    if (hasPhone) {
-      await db.exec(`
-        INSERT INTO employees_new (id, name, employee_id, department_id, designation, email, join_date, phone, status)
-        SELECT e.id, e.name, e.employee_id, d.id, e.designation, e.email, e.join_date, e.phone, e.status
-        FROM employees e
-        LEFT JOIN departments d ON e.department = d.name
-      `);
-    } else {
-      await db.exec(`
-        INSERT INTO employees_new (id, name, employee_id, department_id, designation, email, join_date, status)
-        SELECT e.id, e.name, e.employee_id, d.id, e.designation, e.email, e.join_date, e.status
-        FROM employees e
-        LEFT JOIN departments d ON e.department = d.name
-      `);
-    }
-
-    // Swap tables
-    await db.exec("DROP TABLE employees");
-    await db.exec("ALTER TABLE employees_new RENAME TO employees");
-    console.log("Migration complete.");
-  }
-
-  // Schema Migration: Make 'email' column nullable if it is currently NOT NULL
-  const columnsAfterDept = await db.all("PRAGMA table_info(employees)");
-  const emailCol = columnsAfterDept.find((col: any) => col.name === 'email');
-  if (emailCol && emailCol.notnull === 1) {
-    console.log("Migrating employees table to make 'email' column nullable...");
-    await db.exec(`
-      CREATE TABLE employees_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        employee_id TEXT UNIQUE NOT NULL,
-        department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
-        designation TEXT NOT NULL,
-        email TEXT UNIQUE,
-        join_date TEXT NOT NULL,
-        phone TEXT,
-        status TEXT DEFAULT 'Active'
-      )
-    `);
-    await db.exec(`
-      INSERT INTO employees_new (id, name, employee_id, department_id, designation, email, join_date, phone, status)
-      SELECT id, name, employee_id, department_id, designation, email, join_date, phone, status
-      FROM employees
-    `);
-    await db.exec("DROP TABLE employees");
-    await db.exec("ALTER TABLE employees_new RENAME TO employees");
-    console.log("Email nullability migration complete.");
-  }
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS leave_balances (
-      employee_id INTEGER NOT NULL,
-      leave_type TEXT NOT NULL,
-      allocated_days REAL NOT NULL,
-      used_days REAL DEFAULT 0,
-      encashed_days REAL DEFAULT 0,
-      PRIMARY KEY (employee_id, leave_type),
-      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS leave_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      employee_id INTEGER NOT NULL,
-      leave_type TEXT NOT NULL,
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL,
-      actual_days REAL NOT NULL,
-      reason TEXT NOT NULL,
-      attachment_path TEXT,
-      remarks TEXT,
-      recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS late_deductions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      employee_id INTEGER NOT NULL,
-      month_year TEXT NOT NULL, -- Format: YYYY-MM
-      late_count INTEGER DEFAULT 0,
-      deducted_cl REAL DEFAULT 0,
-      UNIQUE(employee_id, month_year),
-      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_leave_records_employee_id ON leave_records (employee_id);
-    CREATE INDEX IF NOT EXISTS idx_leave_records_dates ON leave_records (start_date, end_date);
-    CREATE INDEX IF NOT EXISTS idx_employees_status ON employees (status);
-
-    CREATE TABLE IF NOT EXISTS admin_sessions (
-      session_id TEXT PRIMARY KEY,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // Run safe schema migrations (adds columns to existing DB files if code updates)
-  try { await db.exec('ALTER TABLE leave_balances ADD COLUMN encashed_days REAL DEFAULT 0;'); } catch {}
-  try { await db.exec('ALTER TABLE leave_records ADD COLUMN modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;'); } catch {}
-
-  // Seed default settings if they do not exist
-  const settingsCount = await db.get('SELECT COUNT(*) as count FROM system_settings');
-  if (settingsCount.count === 0) {
-    const adminPasswordHash = bcrypt.hashSync('admin123', 10);
-    
-    await db.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', 'institute_name', 'Chuti Leave Management');
-    await db.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', 'weekend_days', 'friday,saturday');
-    await db.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', 'sandwich_rule', 'true');
-    await db.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', 'late_cl_threshold', '3');
-    await db.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', 'admin_password_hash', adminPasswordHash);
-    
-    // Seed some default departments
-    await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'Administration');
-    await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'HR');
-    await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'Accounts');
-    await db.run('INSERT OR IGNORE INTO departments (name) VALUES (?)', 'IT');
-  }
-
-  // Record the schema version this database has been migrated up to. The
-  // migrations above (department_id, nullable email, etc.) each detect
-  // whether they're needed by probing for a specific column/state, which
-  // works but means every future migration has to be individually proven
-  // safe against every possible prior schema shape. CURRENT_SCHEMA_VERSION
-  // gives future migrations a cheap, authoritative "have I already run"
-  // check instead: read this value, and only do the column-probing dance
-  // for versions between what's stored here and CURRENT_SCHEMA_VERSION.
-  // Existing databases (no row yet) are stamped at version 1, since every
-  // migration that predates this marker is already idempotent and safe to
-  // leave as-is — this does not change any existing migration's behavior.
-  await db.run(
-    `INSERT INTO system_settings (key, value) VALUES ('schema_version', ?)
-     ON CONFLICT(key) DO UPDATE SET value = ?
-     WHERE CAST(value AS INTEGER) < ?`,
-    [String(CURRENT_SCHEMA_VERSION), String(CURRENT_SCHEMA_VERSION), CURRENT_SCHEMA_VERSION]
-  );
-
-  return db;
 }
+
+export type BackupKind = 'automatic' | 'manual' | 'before-restore' | 'before-year-close';
+
+export function backupKind(name: string): BackupKind {
+  const rest = name.slice(BACKUP_PREFIX.length);
+  if (rest.startsWith('prerestore')) return 'before-restore';
+  if (rest.startsWith('manual')) return 'manual';
+  if (rest.startsWith('yearclose')) return 'before-year-close';
+  return 'automatic';
+}
+
+export { BACKUP_PREFIX, copyWithSidecars };

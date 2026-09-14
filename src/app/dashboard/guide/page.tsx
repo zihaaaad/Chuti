@@ -1,286 +1,136 @@
-'use client';
+import type { Metadata } from 'next';
+import { requireAdmin } from '@/lib/auth';
+import { Alert, PageHeader } from '@/components/ui';
 
-import { useState } from 'react';
-import { BookOpen, Users, FileText, Settings, BarChart3, ShieldCheck, Network } from 'lucide-react';
+export const metadata: Metadata = { title: 'User guide' };
 
-export default function GuidePage() {
-  const [activeTab, setActiveTab] = useState<'getting-started' | 'employees' | 'leaves' | 'reports' | 'settings' | 'backups'>('getting-started');
+const SECTIONS = [
+  { id: 'start', title: 'Getting started' },
+  { id: 'employees', title: 'Employees & CSV import' },
+  { id: 'leave', title: 'Recording leave' },
+  { id: 'lates', title: 'Late arrivals & encashment' },
+  { id: 'reports', title: 'Reports & printing' },
+  { id: 'policy', title: 'Leave policy' },
+  { id: 'year', title: 'Closing a leave year' },
+  { id: 'data', title: 'Backups, security & LAN' },
+];
 
-  const tabs = [
-    { id: 'getting-started', name: 'Getting Started', icon: BookOpen },
-    { id: 'employees', name: 'Employees & CSV', icon: Users },
-    { id: 'leaves', name: 'Recording Leaves', icon: FileText },
-    { id: 'reports', name: 'Reports & Printing', icon: BarChart3 },
-    { id: 'settings', name: 'System Settings', icon: Settings },
-    { id: 'backups', name: 'Backups & LAN', icon: Network },
-  ] as const;
+export default async function GuidePage() {
+  await requireAdmin();
 
   return (
-    <div>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--primary)' }}>User Guide & System Manual</h1>
-        <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)' }}>
-          Detailed instructions for administrators to configure, manage, and use the Chuti Leave Management System.
-        </p>
+    <>
+      <PageHeader title="User guide" description="How to set up Chuti and run leave administration day to day." />
+      <div className="guide">
+        <nav aria-label="Guide sections" className="card" style={{ padding: '0.5rem' }}>
+          {SECTIONS.map((s) => (
+            <a key={s.id} href={`#${s.id}`} className="nav-link">{s.title}</a>
+          ))}
+        </nav>
+
+        <article className="card">
+          <section id="start">
+            <h2>Getting started</h2>
+            <p>Chuti runs on one computer and keeps all data in its data folder: the database, uploaded documents and backups. Nothing is sent to the internet.</p>
+            <h3>First-time setup</h3>
+            <ol>
+              <li>Sign in and replace the default password when asked.</li>
+              <li>In <strong>Settings</strong>, set the organisation name, weekly days off and the sandwich rule.</li>
+              <li>Add this year&apos;s public holidays.</li>
+              <li>Add employees one by one, or import them from a spreadsheet.</li>
+            </ol>
+          </section>
+
+          <section id="employees">
+            <h2>Employees &amp; CSV import</h2>
+            <p>Each employee has a yearly quota for Casual (CL), Sick (SL), Earned (EL) and Maternity (ML) leave. Leave Without Pay (LWP) has no quota.</p>
+            <h3>Importing from a spreadsheet</h3>
+            <ol>
+              <li>On <strong>Employees</strong>, choose <strong>Import CSV</strong> and download the template.</li>
+              <li>Fill in <code>EmployeeID, Name, Designation, Department, Phone, JoiningDate, Email</code>. Dates use YYYY-MM-DD.</li>
+              <li>In Excel, save as <strong>CSV UTF-8</strong>, then upload it.</li>
+            </ol>
+            <p>The import is all-or-nothing. Rows with an ID that already exists are skipped and listed with the reason.</p>
+            <Alert tone="info">When someone leaves, edit them and set the status to <strong>Resigned</strong>. Deleting an employee erases their whole history, including past payroll.</Alert>
+          </section>
+
+          <section id="leave">
+            <h2>Recording leave</h2>
+            <ol>
+              <li>On <strong>Leave records</strong>, choose <strong>Record leave</strong>.</li>
+              <li>Search for the employee by name or ID.</li>
+              <li>Pick the leave type and dates. Tick <strong>Half day</strong> for 0.5 days.</li>
+              <li>Check the preview. It shows the days charged, how weekends and holidays were treated, and the balance before and after.</li>
+              <li>Optionally attach a document (PDF, image or Word, up to 10 MB), then save.</li>
+            </ol>
+            <p>Chuti blocks leave that overlaps existing leave on the same day (two half days are fine), and leave that is more than the remaining balance. Record the extra days as LWP.</p>
+            <p>Deleting a record returns its days to the employee&apos;s balance.</p>
+          </section>
+
+          <section id="lates">
+            <h2>Late arrivals &amp; encashment</h2>
+            <p>On <strong>Overview</strong>, enter the <em>total</em> number of late arrivals for an employee in a month. Saving again replaces the total; it does not add to it. Every N late arrivals (set in Settings) cut one day of CL. The cut never takes CL below zero.</p>
+            <p>To pay out unused Earned Leave, choose <strong>Encash EL</strong> on Leave records. The days leave the EL balance and appear in the ledger.</p>
+          </section>
+
+          <section id="reports">
+            <h2>Reports &amp; printing</h2>
+            <ul>
+              <li><strong>Leave ledger</strong>: every leave in the chosen month. Leave that crosses into another month shows only the days inside the chosen month.</li>
+              <li><strong>Payroll summary</strong>: per employee, days of each leave type in the month, late arrivals, CL cut, and paid days (calendar days minus LWP).</li>
+              <li><strong>Employee statement</strong>: open an employee to see their balances and full ledger, and print it.</li>
+            </ul>
+            <p>Print uses A4 landscape with signature lines. Choose <strong>Save as PDF</strong> as the printer to keep a PDF. <strong>Export CSV</strong> opens directly in Excel.</p>
+          </section>
+
+          <section id="policy">
+            <h2>Leave policy</h2>
+            <h3>Weekly days off and holidays</h3>
+            <p>Days off and holidays are never charged on their own. Changing them affects leave recorded afterwards; existing records keep their day counts.</p>
+            <h3>Sandwich rule</h3>
+            <p>When on, days off that fall <em>between</em> two leave days are charged too. With a Friday–Saturday weekend, leave from Thursday to Sunday charges 4 days. Leave that only starts or ends next to a weekend does not charge the weekend.</p>
+          </section>
+
+          <section id="year">
+            <h2>Closing a leave year</h2>
+            <p>At the end of the year, go to <strong>Settings → Leave year</strong> and choose <strong>Close leave year</strong>. Chuti will:</p>
+            <ol>
+              <li>save a backup,</li>
+              <li>carry each employee&apos;s unused EL into the new year, up to the cap,</li>
+              <li>let unused CL, SL and ML lapse,</li>
+              <li>make records from the closed year read-only (they stay visible in reports).</li>
+            </ol>
+            <p>Leave already recorded on or after the new start date counts toward the new year.</p>
+          </section>
+
+          <section id="data">
+            <h2>Backups, security &amp; LAN</h2>
+            <h3>Backup copies (set this up first)</h3>
+            <p>
+              In <strong>Settings → Backup copies</strong>, choose a folder from the Chuti window on the host computer: a USB drive, a second disk, or a Google Drive / OneDrive folder that syncs to the cloud.
+              Every day at the time you set, Chuti saves a complete copy there, including the database and all attachments, and keeps the newest copies. Overview warns you if copies stop, for example when the drive is unplugged.
+            </p>
+            <p>To restore, choose <strong>Restore</strong> next to a copy. To move to a new computer, install Chuti, choose the same backup folder, and restore the newest copy.</p>
+            <h3>Protect copies with a backup password</h3>
+            <p>
+              Chuti won&apos;t save copies until you choose how they are protected. Choose <strong>Set a backup password</strong> (12+ characters, not the admin password). Chuti shows a <strong>recovery code</strong> once: print it and keep it away from the backup folder and the cloud account.
+              Encrypted copies are useless to anyone who gets into your cloud account or finds the USB drive. Restoring asks for the password or the recovery code.
+            </p>
+            <Alert tone="warning">Lose both the password and the recovery code and the encrypted copies can never be opened. Also keep Chuti&apos;s own data folder out of OneDrive, Google Drive and Dropbox; Settings warns you if it isn&apos;t.</Alert>
+            <h3>Quick restore points</h3>
+            <p>Chuti also saves database-only snapshots in its own data folder on start-up and every 12 hours (latest 30). They are handy for undoing a mistake, but they sit on the same drive as your data. A copy of the current data is saved before every restore.</p>
+            <p><strong>Balance check</strong> recalculates balances from the leave records and fixes any mismatch.</p>
+            <p>The <strong>Activity log</strong> records every change with the time and the browser that made it.</p>
+            <h3>Sharing over the office network</h3>
+            <ol>
+              <li>In the desktop app, use <strong>Network → Copy LAN URL</strong> (for example <code>http://192.168.1.100:3000</code>).</li>
+              <li>Allow inbound TCP on that port in Windows Firewall on the host computer.</li>
+              <li>Colleagues open the URL in a browser and sign in with the admin password.</li>
+            </ol>
+            <Alert tone="warning">Anyone who knows the admin password can change every record. Use a strong password and change it when staff with access leave.</Alert>
+          </section>
+        </article>
       </div>
-
-      <div className="guide-layout-grid">
-        {/* Left: Tab selectors */}
-        <div className="card animate-scale-in" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', animation: 'popup-scale-in 0.05s ease-out' }}>
-          {tabs.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="tab-btn"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem 1rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  width: '100%',
-                  textAlign: 'left',
-                  backgroundColor: isActive ? 'var(--primary-light)' : 'transparent',
-                  color: isActive ? 'var(--primary)' : 'var(--foreground-muted)',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <Icon size={16} style={{ color: isActive ? 'var(--primary-accent)' : 'inherit' }} />
-                {tab.name}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right: Content panel */}
-        <div className="card animate-scale-in" style={{ minHeight: '60vh', padding: '2rem', animation: 'popup-scale-in 0.05s ease-out' }}>
-          {activeTab === 'getting-started' && (
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-                <BookOpen size={20} style={{ color: 'var(--primary-accent)' }} />
-                Getting Started with Chuti
-              </h2>
-              <p style={{ marginBottom: '1rem' }}>
-                Chuti is a professional, offline-first Leave Management System designed to be run locally on a single machine or accessed over a Local Area Network (LAN). It uses a clean, forest green minimalist design and has zero dependency on cloud internet connections.
-              </p>
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Key Concepts</h3>
-              <ul style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                <li>
-                  <strong>Offline First:</strong> All records, scanned documents, and settings are saved locally on this machine. No data is shared with external services.
-                </li>
-                <li>
-                  <strong>Leave Balances:</strong> Each employee has dedicated balances for Casual Leave (CL), Sick Leave (SL), Earned Leave (EL), and Maternity Leave (ML) that automatically deduct when leaves are recorded.
-                </li>
-                <li>
-                  <strong>Local Storage:</strong> Uploaded attachments are saved inside the <code>public/uploads/</code> folder. Database files are stored as <code>database.db</code>.
-                </li>
-              </ul>
-              <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Initial Setup Steps</h3>
-              <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <li>Navigate to the <strong>Settings</strong> panel.</li>
-                <li>Customize the <strong>Institute Name</strong>. This will display on your dashboards and PDF reports.</li>
-                <li>Configure the <strong>Weekend Days</strong> and official holidays to ensure leave duration calculations exclude non-working days accurately.</li>
-                <li>Proceed to the <strong>Employees</strong> section to add your team members.</li>
-              </ol>
-            </div>
-          )}
-
-          {activeTab === 'employees' && (
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-                <Users size={20} style={{ color: 'var(--primary-accent)' }} />
-                Employee Management & Bulk Import
-              </h2>
-              <p style={{ marginBottom: '1.25rem' }}>
-                Manage your staff directory, view current leave balances, or add team members manually or in bulk.
-              </p>
-              
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Adding Employees Manually</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Click <strong>Add Employee</strong> under the Employees page. Fill in their Employee ID, Name, Designation, Department, Phone, and Joining Date. You can also specify custom yearly leave allocations (CL, SL, EL, ML) for individual employees.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Bulk CSV Import</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                To save time, you can upload employee data using a spreadsheet CSV file:
-              </p>
-              <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                <li>Click <strong>Download Template CSV</strong> on the Employees page to download the correctly formatted file.</li>
-                <li>Open the downloaded CSV in Microsoft Excel or Google Sheets.</li>
-                <li>Add your employees&apos; details under the respective column headers: <code>EmployeeID</code>, <code>Name</code>, <code>Designation</code>, <code>Department</code>, <code>Phone</code>, and <code>JoiningDate</code> (formatted as YYYY-MM-DD).</li>
-                <li>Save the spreadsheet as a CSV (Comma Separated Values) file.</li>
-                <li>Click <strong>Choose File</strong> inside the Import section, select your file, and click <strong>Import CSV</strong>.</li>
-              </ol>
-              <div style={{
-                backgroundColor: 'var(--warning-bg)',
-                border: '1px solid rgba(163, 98, 15, 0.15)',
-                color: 'var(--warning)',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.8125rem'
-              }}>
-                <strong>Duplicate ID Detection:</strong> If the CSV contains an Employee ID that is already registered, the system will skip that row and display a summary of skipped duplicates so that you can fix them.
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'leaves' && (
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-                <FileText size={20} style={{ color: 'var(--primary-accent)' }} />
-                Recording & Editing Leaves
-              </h2>
-              <p style={{ marginBottom: '1.25rem' }}>
-                Chuti streamlines leave requests, checks overlapping dates, keeps track of balances, and organizes scanned documents locally.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Recording a Leave</h3>
-              <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                <li>Click the <strong>Record Leave</strong> button.</li>
-                <li>Select the employee. The system displays their remaining balances (CL, SL, EL) directly in the selection list to assist your decision.</li>
-                <li>Select the Leave Type and enter the Start and End dates.</li>
-                <li>To log a half-day leave, check the <strong>Half Day (0.5)</strong> checkbox.</li>
-                <li>Upload a supporting document (image or PDF scan) under <strong>Supporting Document</strong>.</li>
-                <li>Click <strong>Save Leave Record</strong> to deduct the balance and log the entry.</li>
-              </ol>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Viewing and Editing Attachments</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Any record with an attachment displays a **Preview** (eye icon) button. Clicking this icon loads a local preview of the photo or PDF directly inside the app, without opening other programs.
-              </p>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Click **Edit** (pencil icon) in the Actions column of a leave record to modify the dates, reasons, or attachments. In the edit modal, you can delete the existing attachment or replace it with a new upload.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Overlap & Balance Checking</h3>
-              <div style={{
-                backgroundColor: 'var(--info-bg)',
-                border: '1px solid rgba(33, 85, 117, 0.15)',
-                color: 'var(--info)',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.8125rem'
-              }}>
-                <strong>Smart Validations:</strong> The system automatically blocks leave dates that overlap with existing bookings (unless both are logged as half-days on the same day). It also blocks bookings if the requested duration exceeds the employee&apos;s remaining quota.
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'reports' && (
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-                <BarChart3 size={20} style={{ color: 'var(--primary-accent)' }} />
-                Reports Center & PDF Printing
-              </h2>
-              <p style={{ marginBottom: '1.25rem' }}>
-                Generate leave ledger logs, compile monthly payroll attendance summary sheets, print documents, or export data.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Leave Ledger Log vs. Payroll Summary</h3>
-              <ul style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                <li>
-                  <strong>Leave Ledger Log:</strong> Shows detailed historical entries of leaves taken by employees, including dates, reasons, and types.
-                </li>
-                <li>
-                  <strong>Payroll Summary:</strong> Collates and computes monthly attendance metrics for each employee. It calculates total leaves taken (Casual, Sick, Earned), late counts, deducted CL days, and Net Paid Days (Month Calendar Days minus Leave Without Pay days).
-                </li>
-              </ul>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Printing A4 Landscape PDF Reports</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Clicking the <strong>Print Report</strong> button automatically triggers your browser&apos;s print utility. The system uses specific print layouts configured to:
-              </p>
-              <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                <li>Hide the sidebar navigation menu, filter controls, action bars, and buttons.</li>
-                <li>Include a clean printed header showing the Institute Name and the generated date.</li>
-                <li>Force the document to output in **A4 Landscape** format to fit wide payroll summaries without clipping.</li>
-                <li>Prevent table rows from splitting awkwardly across page boundaries.</li>
-              </ol>
-              <div style={{
-                backgroundColor: 'var(--success-bg)',
-                border: '1px solid rgba(45, 106, 79, 0.15)',
-                color: 'var(--success)',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.8125rem'
-              }}>
-                <strong>How to Save as PDF:</strong> When the browser print window opens, select <strong>Save as PDF</strong> (instead of selecting a physical printer) under the &quot;Destination&quot; dropdown. This saves the report locally as a PDF.
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'settings' && (
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-                <Settings size={20} style={{ color: 'var(--primary-accent)' }} />
-                System Settings & Policies
-              </h2>
-              <p style={{ marginBottom: '1.25rem' }}>
-                Configure the organizational profiles, weekend rules, and late attendance deductions.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Organizational Profile</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Specify your organization name in the **Institute Name** input field. This name is used at the top of the sidebar and headers of printable PDF reports.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Weekend Schedules</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Configure which days of the week are weekends (e.g. Friday and Saturday, Sunday only). The leave calculator uses this setting to subtract non-working days from leave requests automatically.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Sandwich Rule Toggle</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                When the **Sandwich Rule** is enabled, if a leave request spans across a weekend or an official holiday, those weekends/holidays are included in the leave duration calculation (deducting them from the balance). If disabled, weekends and holidays are skipped.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Late Attendance CL Deductions</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Set the late threshold limit (e.g., 3 lates). The system automatically computes and deducts 1 day of Casual Leave (CL) for every 3 late attendances logged for that month.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Official Holidays Manager</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                Add official calendar holidays (e.g., National days, seasonal holidays). The system automatically detects these dates and excludes them from leave calculations when the sandwich rule is disabled.
-              </p>
-            </div>
-          )}
-
-          {activeTab === 'backups' && (
-            <div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
-                <ShieldCheck size={20} style={{ color: 'var(--primary-accent)' }} />
-                Data Integrity & Local backups
-              </h2>
-              <p style={{ marginBottom: '1.25rem' }}>
-                Technical guidelines for administrators to keep data secure and share access.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Local Auto-Backups</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1.25rem' }}>
-                Every single time the local server starts up, the system automatically duplicates the database and saves a dated copy in the <code>/backups</code> directory (e.g., <code>database_backup_YYYY-MM-DD.db</code>). If the system experiences a power failure or file corruption, you can restore previous logs using these backups.
-              </p>
-
-              <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Local Network (LAN) Sharing</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>
-                You can allow other computers in the same office or WiFi network to access the portal:
-              </p>
-              <ol style={{ paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <li>Run the launcher file <code>start.bat</code>.</li>
-                <li>The console will display the local network URL (e.g., <code>http://192.168.1.100:3000</code>).</li>
-                <li>Ensure the hosting computer is connected to the network and your local Windows Firewall allows traffic on Port 3000.</li>
-                <li>Other staff can open their browsers and enter that network URL to access the system directly.</li>
-              </ol>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    </>
   );
 }

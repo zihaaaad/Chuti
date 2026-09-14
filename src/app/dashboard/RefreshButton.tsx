@@ -3,32 +3,24 @@
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { useTransition } from 'react';
-import { useToast } from '@/context/ToastContext';
 
+// Re-fetches server data, e.g. to see leave another LAN user just recorded.
+// The spinning icon tracks the real refresh instead of a timed toast.
 export default function RefreshButton() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const { showToast } = useToast();
-
-  const handleRefresh = () => {
-    startTransition(() => {
-      router.refresh();
-    });
-    // Delay toast slightly to align with transition refresh
-    setTimeout(() => {
-      showToast('Dashboard data synchronized!', 'success');
-    }, 200);
-  };
 
   return (
-    <button 
-      className="btn btn-secondary" 
-      onClick={handleRefresh}
+    <button
+      type="button"
+      className="btn btn-secondary"
+      onClick={() => startTransition(() => router.refresh())}
       disabled={isPending}
-      title="Sync/Refresh Console Data"
-      style={{ padding: '0.5rem 0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '38px', minWidth: '38px' }}
+      aria-label="Refresh data"
+      title="Refresh data"
     >
-      <RefreshCw size={16} className={isPending ? 'animate-spin' : ''} />
+      <RefreshCw size={16} className={isPending ? 'spin' : undefined} aria-hidden />
+      <span aria-live="polite">{isPending ? 'Refreshing…' : 'Refresh'}</span>
     </button>
   );
 }

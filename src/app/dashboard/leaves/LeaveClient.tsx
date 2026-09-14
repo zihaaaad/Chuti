@@ -1,13 +1,20 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { addLeaveRecord, deleteLeaveRecord, logLeaveEncashment, updateLeaveRecord } from '@/app/actions';
-import { CalendarRange, X, Check, FileDown, Trash2, Search, DollarSign, Edit2, Eye } from 'lucide-react';
+import { useEffect, useId, useState, useTransition } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { CalendarPlus, Coins, Download, Edit2, Eye, FileText, Lock, Paperclip, Search, Trash2 } from 'lucide-react';
+import { addLeaveRecord, deleteLeaveRecord, logLeaveEncashment, previewLeave, updateLeaveRecord, type LeavePreview } from '@/app/actions/leaves';
 import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 import Modal from '@/components/Modal';
+import EmployeePicker, { type PickerEmployee } from '@/components/EmployeePicker';
+import { Alert, DialogHeader, EmptyState, Field, LeaveTypeBadge, fieldAria, formatDays } from '@/components/ui';
+import { ENCASHMENT_TYPE, LEAVE_TYPES } from '@/lib/domain/leave-types';
+import { formatDisplayDate, formatDisplayRange, todayLocal } from '@/lib/domain/dates';
+import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_MB, isPreviewablePath } from '@/lib/constants';
 
-interface LeaveRecord {
+export interface LeaveRow {
   id: number;
   employee_id: number;
   name: string;
@@ -22,793 +29,436 @@ interface LeaveRecord {
   recorded_at: string;
 }
 
-interface EmployeeItem {
-  id: number;
-  name: string;
+interface Props {
+  records: LeaveRow[];
+  employees: PickerEmployee[];
+  total: number;
+  page: number;
+  pageSize: number;
+  query: string;
+  type: string;
+  leaveYearStart: string;
+  openNew: boolean;
+}
+
+interface LeaveForm {
   employee_id: string;
-  cl_left?: number;
-  sl_left?: number;
-  el_left?: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  is_half_day: boolean;
+  reason: string;
+  remarks: string;
 }
 
-interface LeaveClientProps {
-  initialRecords: LeaveRecord[];
-  employees: EmployeeItem[];
-}
+const emptyForm = (): LeaveForm => ({ employee_id: '', leave_type: 'Casual', start_date: todayLocal(), end_date: todayLocal(), is_half_day: false, reason: '', remarks: '' });
 
-export default function LeaveClient({ initialRecords, employees }: LeaveClientProps) {
+export default function LeaveClient({ records, employees, total, page, pageSize, query, type, leaveYearStart, openNew }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('');
-  
-  // Modal States
-  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-  const [isEncashModalOpen, setIsEncashModalOpen] = useState(false);
-  
-  // Leave Form States
-  const [employeeId, setEmployeeId] = useState('');
-  const [leaveType, setLeaveType] = useState('Casual');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isHalfDay, setIsHalfDay] = useState(false);
-  const [reason, setReason] = useState('');
-  const [remarks, setRemarks] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-
-  // Editing state
-  const [editingRecord, setEditingRecord] = useState<LeaveRecord | null>(null);
-  const [deleteAttachment, setDeleteAttachment] = useState(false);
-
-  // File Preview Modal State
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const [previewTitle, setPreviewTitle] = useState('');
-
-  // Encashment Form States
-  const [encashEmployeeId, setEncashEmployeeId] = useState('');
-  const [encashDays, setEncashDays] = useState('1');
-  const [encashRemarks, setEncashRemarks] = useState('');
-
-  const [error, setError] = useState<string | null>(null);
+  const leaveTitle = useId();
+  const encashTitle = useId();
+  const previewTitle = useId();
   const [isPending, startTransition] = useTransition();
 
-  // Filters
-  const filteredRecords = initialRecords.filter(rec => {
-    const q = searchQuery.toLowerCase();
-    const matchesQuery = 
-      rec.name.toLowerCase().includes(q) ||
-      rec.emp_code.toLowerCase().includes(q) ||
-      rec.reason.toLowerCase().includes(q) ||
-      (rec.remarks && rec.remarks.toLowerCase().includes(q));
-    
-    const matchesType = filterType === '' || rec.leave_type.startsWith(filterType);
+  // ── Filters live in the URL so they survive refresh and can be bookmarked.
+  const [search, setSearch] = useState(query);
+  useEffect(() => {
+    if (search === query) return;
+    const t = setTimeout(() => navigate({ q: search, page: '1' }), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
-    return matchesQuery && matchesType;
-  });
+  function navigate(changes: Record<string, string>) {
+    const params = new URLSearchParams();
+    const next = { q: query, type, page: String(page), ...changes };
+    Object.entries(next).forEach(([k, v]) => {
+      if (v && !(k === 'page' && v === '1')) params.set(k, v);
+    });
+    router.replace(`${pathname}${params.size ? `?${params}` : ''}`, { scroll: false });
+  }
 
-  const openLeaveModal = () => {
-    setEditingRecord(null);
-    setDeleteAttachment(false);
-    setEmployeeId(employees[0]?.id ? String(employees[0].id) : '');
-    setLeaveType('Casual');
-    setStartDate(new Date().toISOString().split('T')[0]);
-    setEndDate(new Date().toISOString().split('T')[0]);
-    setIsHalfDay(false);
-    setReason('');
-    setRemarks('');
+  // ── Leave form
+  const [leaveOpen, setLeaveOpen] = useState(openNew);
+  const [editing, setEditing] = useState<LeaveRow | null>(null);
+  const [form, setForm] = useState<LeaveForm>(emptyForm);
+  const [file, setFile] = useState<File | null>(null);
+  const [removeAttachment, setRemoveAttachment] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<LeavePreview | null>(null);
+
+  useEffect(() => {
+    if (openNew) router.replace(pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openLeave = (rec: LeaveRow | null) => {
+    setEditing(rec);
+    setForm(
+      rec
+        ? { employee_id: String(rec.employee_id), leave_type: rec.leave_type, start_date: rec.start_date, end_date: rec.end_date, is_half_day: rec.actual_days === 0.5 && rec.start_date === rec.end_date, reason: rec.reason, remarks: rec.remarks ?? '' }
+        : emptyForm(),
+    );
     setFile(null);
-    setError(null);
-    setIsLeaveModalOpen(true);
+    setRemoveAttachment(false);
+    setErrors({});
+    setFormError(null);
+    setPreview(null);
+    setLeaveOpen(true);
   };
 
-  const openEditLeaveModal = (record: LeaveRecord) => {
-    setEditingRecord(record);
-    setDeleteAttachment(false);
-    setEmployeeId(String(record.employee_id));
-    setLeaveType(record.leave_type);
-    setStartDate(record.start_date);
-    setEndDate(record.end_date);
-    setIsHalfDay(record.actual_days === 0.5);
-    setReason(record.reason);
-    setRemarks(record.remarks || '');
-    setFile(null);
-    setError(null);
-    setIsLeaveModalOpen(true);
-  };
-
-  const openEncashModal = () => {
-    setEncashEmployeeId(employees[0]?.id ? String(employees[0].id) : '');
-    setEncashDays('1');
-    setEncashRemarks('');
-    setError(null);
-    setIsEncashModalOpen(true);
-  };
-
-  const handleLeaveSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!employeeId) {
-      setError('Please select an employee.');
+  // Live preview of days charged and the balance afterwards.
+  useEffect(() => {
+    if (!leaveOpen) return;
+    const end = form.is_half_day ? form.start_date : form.end_date;
+    if (!form.start_date || !end || end < form.start_date) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPreview(null);
       return;
     }
-
-    if (!isHalfDay && new Date(startDate) > new Date(endDate)) {
-      setError('Start date cannot be after end date.');
-      showToast('Start date cannot be after end date.', 'error');
-      return;
-    }
-
-    if (file && file.size > 10 * 1024 * 1024) {
-      setError('File upload size exceeds the 10MB limit.');
-      showToast('File upload size exceeds the 10MB limit.', 'error');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('employee_id', employeeId);
-    formData.append('leave_type', leaveType);
-    formData.append('start_date', startDate);
-    formData.append('end_date', isHalfDay ? startDate : endDate);
-    formData.append('is_half_day', String(isHalfDay));
-    formData.append('reason', reason);
-    formData.append('remarks', remarks);
-    if (file) {
-      formData.append('attachment', file);
-    }
-    if (editingRecord) {
-      formData.append('id', String(editingRecord.id));
-      formData.append('delete_attachment', String(deleteAttachment));
-    }
-
-    startTransition(async () => {
-      const res = editingRecord
-        ? await updateLeaveRecord(formData)
-        : await addLeaveRecord(formData);
-      if (res.success) {
-        showToast(
-          editingRecord 
-            ? 'Leave record updated successfully!' 
-            : 'Leave application recorded successfully!', 
-          'success'
-        );
-        setIsLeaveModalOpen(false);
-        setEditingRecord(null);
-        setDeleteAttachment(false);
-      } else {
-        setError(res.error || 'Failed to save leave record.');
-        showToast(res.error || 'Failed to save leave record.', 'error');
-      }
-    });
-  };
-
-  const handleEncashSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!encashEmployeeId) {
-      setError('Please select an employee.');
-      return;
-    }
-
-    const days = parseFloat(encashDays);
-    if (isNaN(days) || days <= 0) {
-      setError('Encashed days must be a positive number.');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('employee_id', encashEmployeeId);
-    formData.append('encash_days', encashDays);
-    formData.append('remarks', encashRemarks);
-
-    startTransition(async () => {
-      const res = await logLeaveEncashment(formData);
-      if (res.success) {
-        showToast('Leave encashment logged successfully!', 'success');
-        setIsEncashModalOpen(false);
-      } else {
-        setError(res.error || 'Failed to record encashment.');
-        showToast(res.error || 'Failed to record encashment.', 'error');
-      }
-    });
-  };
-
-  const handleCancelLeave = async (id: number, employeeName: string, days: number, type: string) => {
-    const ok = await confirm({
-      title: 'Cancel Leave Record',
-      message: `Are you sure you want to cancel this ${days}-day ${type} leave for ${employeeName}? This will refund the days back to their balance.`,
-      confirmText: 'Cancel Leave',
-      isDanger: true
-    });
-    if (ok) {
-      startTransition(async () => {
-        const res = await deleteLeaveRecord(id);
-        if (res.success) {
-          showToast(`Successfully cancelled leave and refunded ${days} days to ${employeeName}.`, 'success');
-        } else {
-          showToast(res.error || 'Failed to cancel leave record.', 'error');
-        }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const res = await previewLeave({
+        employee_id: form.employee_id ? Number(form.employee_id) : undefined,
+        leave_type: form.leave_type,
+        start_date: form.start_date,
+        end_date: end,
+        is_half_day: form.is_half_day,
+        ignore_record_id: editing?.id,
       });
+      if (!cancelled) setPreview(res.success ? res.data : null);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [leaveOpen, form.employee_id, form.leave_type, form.start_date, form.end_date, form.is_half_day, editing?.id]);
+
+  const update = <K extends keyof LeaveForm>(key: K, value: LeaveForm[K]) =>
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      if (key === 'start_date' && next.end_date < (value as string)) next.end_date = value as string;
+      return next;
+    });
+
+  const submitLeave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (file && file.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+      setErrors({ attachment: `The file is larger than ${MAX_ATTACHMENT_MB} MB.` });
+      return;
     }
+    const fd = new FormData();
+    Object.entries(form).forEach(([k, v]) => fd.set(k, String(v)));
+    if (form.is_half_day) fd.set('end_date', form.start_date);
+    if (file) fd.set('attachment', file);
+    if (editing) {
+      fd.set('id', String(editing.id));
+      fd.set('delete_attachment', String(removeAttachment));
+    }
+    startTransition(async () => {
+      const res = editing ? await updateLeaveRecord(fd) : await addLeaveRecord(fd);
+      if (res.success) {
+        const name = employees.find((x) => String(x.id) === form.employee_id)?.name ?? editing?.name ?? 'Leave';
+        showToast(editing ? `Updated leave for ${name}.` : `Recorded ${preview ? formatDays(preview.days) : 'leave'} for ${name}.`, 'success');
+        setLeaveOpen(false);
+      } else {
+        setErrors(res.fieldErrors ?? {});
+        setFormError(res.fieldErrors ? null : res.error);
+      }
+    });
   };
+
+  // ── Encashment
+  const [encashOpen, setEncashOpen] = useState(false);
+  const [encash, setEncash] = useState({ employee_id: '', encash_days: '1', remarks: '' });
+  const [encashError, setEncashError] = useState<string | null>(null);
+  const encashEmployee = employees.find((x) => String(x.id) === encash.employee_id);
+
+  const submitEncash = (e: React.FormEvent) => {
+    e.preventDefault();
+    const fd = new FormData();
+    Object.entries(encash).forEach(([k, v]) => fd.set(k, v));
+    startTransition(async () => {
+      const res = await logLeaveEncashment(fd);
+      if (res.success) {
+        showToast(`Encashed ${formatDays(Number(encash.encash_days))} of Earned Leave for ${encashEmployee?.name}.`, 'success');
+        setEncashOpen(false);
+      } else {
+        setEncashError(res.error);
+      }
+    });
+  };
+
+  // ── Delete
+  const onDelete = async (rec: LeaveRow) => {
+    const isEncash = rec.leave_type === ENCASHMENT_TYPE;
+    const ok = await confirm({
+      title: isEncash ? 'Delete this encashment?' : 'Delete this leave record?',
+      message: `${rec.name}: ${formatDays(rec.actual_days)} of ${isEncash ? 'encashed Earned Leave' : rec.leave_type}, ${formatDisplayRange(rec.start_date, rec.end_date)}. The ${formatDays(rec.actual_days)} go back to their balance${rec.attachment_path ? ' and the attachment is deleted' : ''}.`,
+      confirmText: `Delete and refund ${formatDays(rec.actual_days)}`,
+      isDanger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const res = await deleteLeaveRecord(rec.id);
+      showToast(res.success ? `Deleted. ${formatDays(res.data.refunded)} refunded to ${rec.name}.` : res.error, res.success ? 'success' : 'error');
+    });
+  };
+
+  // ── Attachment preview
+  const [viewing, setViewing] = useState<LeaveRow | null>(null);
+
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const selectedEmployee = employees.find((x) => String(x.id) === form.employee_id);
+  const inactiveEditing = editing && !selectedEmployee;
 
   return (
-    <div>
-      {/* Search and Filters Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '1rem',
-        marginBottom: '1.5rem',
-        flexWrap: 'wrap'
-      }} className="no-print">
-        
-        {/* Left: Filters */}
-        <div style={{ display: 'flex', gap: '0.75rem', flex: 1, flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', minWidth: '240px' }}>
-            <Search size={18} style={{
-              position: 'absolute',
-              left: '0.75rem',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--foreground-muted)'
-            }} />
-            <input 
-              className="form-control" 
-              type="text" 
-              placeholder="Search by name, reason..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ paddingLeft: '2.5rem' }}
-            />
+    <>
+      <div className="toolbar no-print">
+        <div className="group">
+          <div className="input-with-icon" style={{ width: 'min(320px, 100%)' }}>
+            <Search size={16} aria-hidden />
+            <input className="input" type="search" placeholder="Search name, ID, reason…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search leave records" />
           </div>
-
-          <select 
-            className="form-control form-select" 
-            style={{ width: '150px' }}
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-          >
-            <option value="">All Types</option>
-            <option value="Casual">Casual</option>
-            <option value="Sick">Sick</option>
-            <option value="Earned">Earned</option>
-            <option value="Maternity">Maternity</option>
-            <option value="LWP">LWP</option>
+          <select className="select" style={{ width: 'auto' }} value={type} onChange={(e) => navigate({ type: e.target.value, page: '1' })} aria-label="Filter by leave type">
+            <option value="">All types</option>
+            {LEAVE_TYPES.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+            <option value={ENCASHMENT_TYPE}>EL encashments</option>
           </select>
         </div>
-
-        {/* Right: Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-secondary" onClick={openEncashModal}>
-            <DollarSign size={16} />
-            Log Encashment
+        <div className="group">
+          <button type="button" className="btn btn-secondary" onClick={() => { setEncash({ employee_id: '', encash_days: '1', remarks: '' }); setEncashError(null); setEncashOpen(true); }}>
+            <Coins size={16} aria-hidden /> Encash EL
           </button>
-          
-          <button className="btn btn-primary" onClick={openLeaveModal}>
-            <CalendarRange size={16} />
-            Record Leave
+          <button type="button" className="btn btn-primary" onClick={() => openLeave(null)}>
+            <CalendarPlus size={16} aria-hidden /> Record leave
           </button>
         </div>
       </div>
 
-      {/* Leave Logs Table */}
-      <div className="table-container">
+      <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
               <th>Employee</th>
               <th>Type</th>
               <th>Period</th>
-              <th>Days</th>
-              <th>Reason & Remarks</th>
-              <th>Attachment</th>
-              <th className="no-print" style={{ textAlign: 'right' }}>Actions</th>
+              <th className="num">Days</th>
+              <th>Reason</th>
+              <th className="right"><span className="sr-only">Attachment and actions</span></th>
             </tr>
           </thead>
           <tbody>
-            {filteredRecords.length === 0 ? (
+            {records.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--foreground-muted)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                    <Search size={32} style={{ opacity: 0.5 }} />
-                    <span style={{ fontSize: '0.875rem' }}>No leave records found matching your search.</span>
-                  </div>
+                <td colSpan={6}>
+                  {query || type ? (
+                    <EmptyState icon={<Search size={28} aria-hidden />} title="No records match">Clear the search or type filter to see everything.</EmptyState>
+                  ) : (
+                    <EmptyState icon={<FileText size={28} aria-hidden />} title="No leave recorded yet">Use Record leave to add the first one.</EmptyState>
+                  )}
                 </td>
               </tr>
             ) : (
-              filteredRecords.map(rec => (
-                <tr key={rec.id}>
-                  <td>
-                    <div style={{ fontWeight: '600' }}>{rec.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>{rec.emp_code}</div>
-                  </td>
-                  <td>
-                    <span className={`badge ${
-                      rec.leave_type.startsWith('Casual') ? 'badge-success' : 
-                      rec.leave_type.startsWith('Sick') ? 'badge-info' : 
-                      rec.leave_type.startsWith('LWP') ? 'badge-danger' : 'badge-warning'
-                    }`}>
-                      {rec.leave_type}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '0.8125rem' }}>
-                    {rec.start_date === rec.end_date ? (
-                      rec.start_date
-                    ) : (
-                      `${rec.start_date} to ${rec.end_date}`
-                    )}
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{rec.actual_days} days</td>
-                  <td>
-                    <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{rec.reason}</div>
-                    {rec.remarks && <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginTop: '0.125rem' }}>Remarks: {rec.remarks}</div>}
-                  </td>
-                  <td>
-                    {rec.attachment_path ? (
-                      <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', gap: '0.25rem', height: '28px', minWidth: 'auto' }}
-                          onClick={() => {
-                            setPreviewPath(rec.attachment_path);
-                            setPreviewTitle(`${rec.name} - Attachment`);
-                          }}
-                          title="Preview Document"
-                        >
-                          <Eye size={14} />
-                          Preview
-                        </button>
-                        <a 
-                          href={rec.attachment_path} 
-                          download
-                          className="btn btn-secondary" 
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', gap: '0.25rem', height: '28px', minWidth: 'auto' }}
-                          title="Download Document"
-                        >
-                          <FileDown size={14} />
-                        </a>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>None</span>
-                    )}
-                  </td>
-                  <td className="no-print" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {rec.leave_type !== 'Earned (Encashed)' && (
-                      <button 
-                        className="btn btn-secondary"
-                        style={{ padding: '0.375rem', marginRight: '0.5rem', minWidth: 'auto', border: 'none' }}
-                        onClick={() => openEditLeaveModal(rec)}
-                        title="Edit Leave Record"
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                    )}
-                    <button 
-                      className="btn btn-danger-outline"
-                      style={{ padding: '0.375rem', minWidth: 'auto' }}
-                      onClick={() => handleCancelLeave(rec.id, rec.name, rec.actual_days, rec.leave_type)}
-                      title="Cancel Leave (Refund Balance)"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))
+              records.map((rec) => {
+                const locked = rec.start_date < leaveYearStart;
+                const isEncash = rec.leave_type === ENCASHMENT_TYPE;
+                return (
+                  <tr key={rec.id} className={locked ? 'locked' : undefined}>
+                    <td className="primary-cell">
+                      <Link href={`/dashboard/employees/${rec.employee_id}`}>{rec.name}</Link>
+                      <span className="sub">{rec.emp_code}</span>
+                    </td>
+                    <td><LeaveTypeBadge type={rec.leave_type} /></td>
+                    <td className="nowrap">{isEncash ? formatDisplayDate(rec.start_date) : formatDisplayRange(rec.start_date, rec.end_date)}</td>
+                    <td className="num">{rec.actual_days}</td>
+                    <td style={{ maxWidth: 360 }}>
+                      {rec.reason}
+                      {rec.remarks && <span className="sub">{rec.remarks}</span>}
+                    </td>
+                    <td className="right nowrap">
+                      {rec.attachment_path && (
+                        isPreviewablePath(rec.attachment_path) ? (
+                          <button type="button" className="icon-btn" onClick={() => setViewing(rec)} aria-label={`View attachment for ${rec.name}`} title="View attachment">
+                            <Eye size={16} aria-hidden />
+                          </button>
+                        ) : (
+                          <a className="icon-btn" href={`${rec.attachment_path}?download=1`} aria-label={`Download attachment for ${rec.name}`} title="Download attachment">
+                            <Paperclip size={16} aria-hidden />
+                          </a>
+                        )
+                      )}
+                      {locked ? (
+                        <span className="icon-btn" title="Closed leave year: read-only" aria-label="Closed leave year, read-only"><Lock size={15} aria-hidden /></span>
+                      ) : (
+                        <span className="no-print">
+                          {!isEncash && (
+                            <button type="button" className="icon-btn" onClick={() => openLeave(rec)} aria-label={`Edit leave for ${rec.name}`} title="Edit">
+                              <Edit2 size={16} aria-hidden />
+                            </button>
+                          )}
+                          <button type="button" className="icon-btn danger" onClick={() => onDelete(rec)} disabled={isPending} aria-label={`Delete leave for ${rec.name}`} title="Delete and refund">
+                            <Trash2 size={16} aria-hidden />
+                          </button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Log Leave Modal */}
-      <Modal isOpen={isLeaveModalOpen} onClose={() => setIsLeaveModalOpen(false)} maxWidth="500px" labelledBy="leave-modal-title">
-            {/* Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid var(--border)',
-              paddingBottom: '1rem',
-              marginBottom: '1.5rem'
-            }}>
-              <h3 id="leave-modal-title" style={{ fontSize: '1.25rem' }}>{editingRecord ? 'Edit Leave Record' : 'Record Leave Application'}</h3>
-              <button onClick={() => setIsLeaveModalOpen(false)} className="btn-close" aria-label="Close dialog">
-                <X size={20} />
-              </button>
-            </div>
+      <nav className="pagination no-print" aria-label="Pagination">
+        <span>
+          {total === 0 ? 'No records' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+        </span>
+        {pages > 1 && (
+          <span className="group" style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => navigate({ page: String(page - 1) })}>Previous</button>
+            <span style={{ alignSelf: 'center' }}>Page {page} of {pages}</span>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={page >= pages} onClick={() => navigate({ page: String(page + 1) })}>Next</button>
+          </span>
+        )}
+      </nav>
 
-            {/* Error */}
-            {error && (
-              <div style={{
-                backgroundColor: 'var(--error-bg)',
-                color: 'var(--error)',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.8125rem',
-                marginBottom: '1.25rem',
-                border: '1px solid rgba(154, 32, 32, 0.1)'
-              }}>
-                {error}
-              </div>
-            )}
+      {/* ── Record / edit leave ─────────────────────────────────────────── */}
+      <Modal isOpen={leaveOpen} onClose={() => setLeaveOpen(false)} labelledBy={leaveTitle} maxWidth="600px" locked={isPending}>
+        <form onSubmit={submitLeave} noValidate>
+          <DialogHeader id={leaveTitle} title={editing ? 'Edit leave record' : 'Record leave'} onClose={() => setLeaveOpen(false)} />
+          <div className="form-grid">
+            {formError && <Alert tone="danger" live>{formError}</Alert>}
+            {inactiveEditing && <Alert tone="warning">{editing?.name} is not active, so this record can only be deleted.</Alert>}
 
-            {/* Form */}
-            <form onSubmit={handleLeaveSubmit} encType="multipart/form-data">
-              <div className="form-group">
-                <label className="form-label" htmlFor="leave-emp">Employee *</label>
-                <select 
-                  className="form-control form-select" 
-                  id="leave-emp"
-                  value={employeeId}
-                  onChange={(e) => setEmployeeId(e.target.value)}
-                  disabled={isPending}
-                  required
-                >
-                  <option value="">-- Select Employee --</option>
-                  {employees.map(emp => {
-                    const cl = emp.cl_left ?? 0;
-                    const sl = emp.sl_left ?? 0;
-                    const el = emp.el_left ?? 0;
-                    return (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name} ({emp.employee_id}) — CL: {cl}, SL: {sl}, EL: {el} Left
-                      </option>
-                    );
-                  })}
+            <Field label="Employee" htmlFor="leave-emp" required error={errors.employee_id}>
+              <EmployeePicker id="leave-emp" employees={employees} value={form.employee_id} onChange={(v) => update('employee_id', v)} disabled={isPending} invalid={!!errors.employee_id} describedBy={errors.employee_id ? 'leave-emp-error' : undefined} />
+            </Field>
+
+            <div className="form-grid cols-2">
+              <Field label="Leave type" htmlFor="leave-type" required error={errors.leave_type}>
+                <select className="select" value={form.leave_type} onChange={(e) => update('leave_type', e.target.value)} disabled={isPending} {...fieldAria('leave-type', errors.leave_type)}>
+                  {LEAVE_TYPES.map((t) => <option key={t.code} value={t.code}>{t.label} ({t.short})</option>)}
                 </select>
-              </div>
-
-              <div className="grid-2col">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="leave-type">Leave Type *</label>
-                  <select 
-                    className="form-control form-select" 
-                    id="leave-type"
-                    value={leaveType}
-                    onChange={(e) => setLeaveType(e.target.value)}
-                    disabled={isPending}
-                    required
-                  >
-                    <option value="Casual">Casual Leave (CL)</option>
-                    <option value="Sick">Sick Leave (SL)</option>
-                    <option value="Earned">Earned Leave (EL)</option>
-                    <option value="Maternity">Maternity Leave (ML)</option>
-                    <option value="LWP">Leave Without Pay (LWP)</option>
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: '1.75rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={isHalfDay} 
-                      onChange={(e) => setIsHalfDay(e.target.checked)}
-                      disabled={isPending}
-                      style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
-                    />
-                    Half Day (0.5)
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid-2col">
-                <div className="form-group">
-                  <label className="form-label" htmlFor="leave-start">Start Date *</label>
-                  <input 
-                    className="form-control" 
-                    type="date" 
-                    id="leave-start" 
-                    value={startDate}
-                    onChange={(e) => {
-                      const newStart = e.target.value;
-                      setStartDate(newStart);
-                      if (new Date(endDate) < new Date(newStart)) {
-                        setEndDate(newStart);
-                      }
-                    }}
-                    disabled={isPending}
-                    required
-                  />
-                </div>
-
-                {!isHalfDay && (
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="leave-end">End Date *</label>
-                    <input 
-                      className="form-control" 
-                      type="date" 
-                      id="leave-end" 
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      disabled={isPending}
-                      min={startDate}
-                      required
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="leave-reason">Reason *</label>
-                <input 
-                  className="form-control" 
-                  type="text" 
-                  id="leave-reason" 
-                  placeholder="Medical checkup, personal work, etc."
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  disabled={isPending}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="leave-file">
-                  {editingRecord?.attachment_path ? 'Replace Supporting Document' : 'Supporting Document (Scanned PDF/Image)'}
+              </Field>
+              <div className="field" style={{ justifyContent: 'flex-end' }}>
+                <label className="check" style={{ minHeight: 38 }}>
+                  <input type="checkbox" checked={form.is_half_day} onChange={(e) => update('is_half_day', e.target.checked)} disabled={isPending} />
+                  Half day
                 </label>
-                
-                {editingRecord?.attachment_path && (
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between',
-                    padding: '0.625rem 0.75rem', 
-                    backgroundColor: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md)',
-                    marginBottom: '0.75rem'
-                  }}>
-                    {!deleteAttachment ? (
-                      <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: '500', color: 'var(--foreground)' }}>
-                            Current File: {editingRecord.attachment_path.split('/').pop()}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', gap: '0.25rem', height: '24px', minWidth: 'auto' }}
-                            onClick={() => {
-                              setPreviewPath(editingRecord.attachment_path);
-                              setPreviewTitle(`${editingRecord.name} - Attachment`);
-                            }}
-                          >
-                            <Eye size={12} />
-                            Preview
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-danger-outline"
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '24px', minWidth: 'auto' }}
-                          onClick={() => setDeleteAttachment(true)}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ fontSize: '0.8125rem', color: 'var(--error)', fontWeight: '500' }}>
-                          Attachment will be deleted on save
-                        </span>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '24px', minWidth: 'auto' }}
-                          onClick={() => setDeleteAttachment(false)}
-                        >
-                          Undo
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                <input 
-                  className="form-control" 
-                  type="file" 
-                  id="leave-file" 
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  disabled={isPending}
-                  accept=".pdf,.jpg,.jpeg,.png"
-                />
               </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="leave-remarks">Remarks</label>
-                <textarea 
-                  className="form-control" 
-                  id="leave-remarks" 
-                  rows={2}
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  disabled={isPending}
-                />
-              </div>
-
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                borderTop: '1px solid var(--border)',
-                paddingTop: '1.25rem',
-                marginTop: '1.5rem'
-              }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsLeaveModalOpen(false)} disabled={isPending}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={isPending}>
-                  <Check size={16} />
-                  {isPending ? 'Saving...' : editingRecord ? 'Update Leave Record' : 'Save Leave Record'}
-                </button>
-              </div>
-            </form>
-      </Modal>
-
-      {/* Log Encashment Modal */}
-      <Modal isOpen={isEncashModalOpen} onClose={() => setIsEncashModalOpen(false)} maxWidth="450px" labelledBy="encash-modal-title">
-            {/* Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid var(--border)',
-              paddingBottom: '1rem',
-              marginBottom: '1.5rem'
-            }}>
-              <h3 id="encash-modal-title" style={{ fontSize: '1.25rem' }}>Log Earned Leave Encashment</h3>
-              <button onClick={() => setIsEncashModalOpen(false)} className="btn-close" aria-label="Close dialog">
-                <X size={20} />
-              </button>
+              <Field label={form.is_half_day ? 'Date' : 'Start date'} htmlFor="leave-start" required error={errors.start_date}>
+                <input className="input" type="date" value={form.start_date} min={leaveYearStart === '0001-01-01' ? undefined : leaveYearStart} onChange={(e) => update('start_date', e.target.value)} disabled={isPending} {...fieldAria('leave-start', errors.start_date)} />
+              </Field>
+              {!form.is_half_day && (
+                <Field label="End date" htmlFor="leave-end" required error={errors.end_date}>
+                  <input className="input" type="date" value={form.end_date} min={form.start_date} onChange={(e) => update('end_date', e.target.value)} disabled={isPending} {...fieldAria('leave-end', errors.end_date)} />
+                </Field>
+              )}
             </div>
 
-            {/* Error */}
-            {error && (
-              <div style={{
-                backgroundColor: 'var(--error-bg)',
-                color: 'var(--error)',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.8125rem',
-                marginBottom: '1.25rem',
-                border: '1px solid rgba(154, 32, 32, 0.1)'
-              }}>
-                {error}
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={handleEncashSubmit}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="encash-emp">Employee *</label>
-                <select 
-                  className="form-control form-select" 
-                  id="encash-emp"
-                  value={encashEmployeeId}
-                  onChange={(e) => setEncashEmployeeId(e.target.value)}
-                  disabled={isPending}
-                  required
-                >
-                  <option value="">-- Select Employee --</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_id})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="encash-days">Number of Days to Encash *</label>
-                <input 
-                  className="form-control" 
-                  type="number" 
-                  min="0.5"
-                  step="0.5"
-                  id="encash-days" 
-                  value={encashDays}
-                  onChange={(e) => setEncashDays(e.target.value)}
-                  disabled={isPending}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="encash-remarks">Remarks (e.g. Payment details)</label>
-                <textarea 
-                  className="form-control" 
-                  id="encash-remarks" 
-                  rows={2}
-                  placeholder="Encashed for June 2026 payroll..."
-                  value={encashRemarks}
-                  onChange={(e) => setEncashRemarks(e.target.value)}
-                  disabled={isPending}
-                />
-              </div>
-
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '0.75rem',
-                borderTop: '1px solid var(--border)',
-                paddingTop: '1.25rem',
-                marginTop: '1.5rem'
-              }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsEncashModalOpen(false)} disabled={isPending}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={isPending}>
-                  <Check size={16} />
-                  {isPending ? 'Logging...' : 'Confirm Encashment'}
-                </button>
-              </div>
-            </form>
-      </Modal>
-
-      {/* File Preview Modal (stacked above the leave modal since it can be opened from within it) */}
-      <Modal
-        isOpen={!!previewPath}
-        onClose={() => setPreviewPath(null)}
-        maxWidth="800px"
-        zIndex={200}
-        labelledBy="preview-modal-title"
-        className="card animate-scale-in"
-        overlayClassName="no-print"
-        dialogStyle={{ display: 'flex', flexDirection: 'column', animation: 'popup-scale-in 0.05s ease-out' }}
-      >
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid var(--border)',
-              paddingBottom: '1rem',
-              marginBottom: '1rem'
-            }}>
-              <h3 id="preview-modal-title" style={{ fontSize: '1.25rem' }}>{previewTitle}</h3>
-              <button onClick={() => setPreviewPath(null)} className="btn-close" aria-label="Close dialog">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-md)', padding: '1rem' }}>
-              {previewPath && (previewPath.toLowerCase().endsWith('.pdf') ? (
-                <iframe
-                  src={previewPath}
-                  style={{ width: '100%', height: '60vh', border: 'none', borderRadius: 'var(--radius-sm)' }}
-                />
+            <div className="preview" aria-live="polite">
+              {!preview ? (
+                <span className="subtle">Choose dates to see how many days will be charged.</span>
+              ) : preview.closedYear ? (
+                <span className="after-negative">These dates are in a closed leave year and can&apos;t be recorded.</span>
               ) : (
-                <img
-                  src={previewPath}
-                  alt="Attachment Preview"
-                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
-                />
-              ))}
+                <>
+                  <span className="charge">Charges {formatDays(preview.days)}</span>
+                  <span className="subtle num">
+                    {preview.calendarDays} calendar day{preview.calendarDays === 1 ? '' : 's'}: {preview.workingDays} working
+                    {preview.weekendDays > 0 && `, ${preview.weekendDays} weekend`}
+                    {preview.holidayDays > 0 && `, ${preview.holidayDays} holiday`}
+                    {preview.sandwichedDays > 0 && ` (${preview.sandwichedDays} off-day${preview.sandwichedDays === 1 ? '' : 's'} counted by the sandwich rule)`}
+                  </span>
+                  {preview.balanceBefore !== null && (
+                    <span className="num">
+                      {form.leave_type} balance: {preview.balanceBefore} → <span className={preview.balanceAfter! < 0 ? 'after-negative' : undefined}>{preview.balanceAfter}</span>
+                      {preview.balanceAfter! < 0 && ' — not enough balance. Use Leave Without Pay for the extra days.'}
+                    </span>
+                  )}
+                  {preview.overlap && <span className="after-negative">Clashes with leave already recorded for this employee.</span>}
+                  {preview.days === 0 && <span className="after-negative">Every day in this range is a weekend or holiday.</span>}
+                </>
+              )}
             </div>
 
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '0.75rem',
-              marginTop: '1rem',
-              borderTop: '1px solid var(--border)',
-              paddingTop: '1rem'
-            }}>
-              <a
-                href={previewPath || '#'}
-                download
-                className="btn btn-secondary"
-                style={{ display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}
-              >
-                <FileDown size={16} />
-                Download
-              </a>
-              <button className="btn btn-primary" onClick={() => setPreviewPath(null)}>
-                Close
-              </button>
-            </div>
+            <Field label="Reason" htmlFor="leave-reason" required error={errors.reason}>
+              <input className="input" value={form.reason} onChange={(e) => update('reason', e.target.value)} placeholder="e.g. Fever, family event" disabled={isPending} {...fieldAria('leave-reason', errors.reason)} />
+            </Field>
+
+            <Field label="Supporting document" htmlFor="leave-file" error={errors.attachment} hint={`PDF, image or Word file up to ${MAX_ATTACHMENT_MB} MB.`}>
+              {editing?.attachment_path && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                  <span className={removeAttachment ? 'field-error' : 'subtle'}>
+                    {removeAttachment ? 'The current file will be removed when you save.' : `Current: ${editing.attachment_path.split('/').pop()?.replace(/^\d+_[a-f0-9]{8}_/, '')}`}
+                  </span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRemoveAttachment((r) => !r)}>{removeAttachment ? 'Keep file' : 'Remove file'}</button>
+                </div>
+              )}
+              <input className="input" type="file" accept={ATTACHMENT_ACCEPT} onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={isPending} {...fieldAria('leave-file', errors.attachment, true)} />
+            </Field>
+
+            <Field label="Remarks" htmlFor="leave-remarks" error={errors.remarks}>
+              <textarea className="textarea" rows={2} value={form.remarks} onChange={(e) => update('remarks', e.target.value)} disabled={isPending} {...fieldAria('leave-remarks', errors.remarks)} />
+            </Field>
+          </div>
+          <div className="form-footer">
+            <button type="button" className="btn btn-secondary" onClick={() => setLeaveOpen(false)} disabled={isPending}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={isPending || !!inactiveEditing}>
+              {isPending ? 'Saving…' : editing ? 'Save changes' : preview && preview.days > 0 ? `Record ${formatDays(preview.days)}` : 'Record leave'}
+            </button>
+          </div>
+        </form>
       </Modal>
-    </div>
+
+      {/* ── Encashment ──────────────────────────────────────────────────── */}
+      <Modal isOpen={encashOpen} onClose={() => setEncashOpen(false)} labelledBy={encashTitle} maxWidth="480px" locked={isPending}>
+        <form onSubmit={submitEncash} noValidate>
+          <DialogHeader id={encashTitle} title="Encash Earned Leave" description="Pays out unused EL. The days are taken from the EL balance and logged today." onClose={() => setEncashOpen(false)} />
+          <div className="form-grid">
+            {encashError && <Alert tone="danger" live>{encashError}</Alert>}
+            <Field label="Employee" htmlFor="encash-emp" required hint={encashEmployee ? `${formatDays(encashEmployee.el_left)} of EL available` : undefined}>
+              <EmployeePicker id="encash-emp" employees={employees} value={encash.employee_id} onChange={(v) => setEncash((s) => ({ ...s, employee_id: v }))} disabled={isPending} describedBy="encash-emp-hint" />
+            </Field>
+            <Field label="Days to encash" htmlFor="encash-days" required>
+              <input id="encash-days" className="input num" type="number" min={0.5} step={0.5} max={encashEmployee?.el_left ?? undefined} value={encash.encash_days} onChange={(e) => setEncash((s) => ({ ...s, encash_days: e.target.value }))} disabled={isPending} />
+            </Field>
+            <Field label="Remarks" htmlFor="encash-remarks">
+              <textarea id="encash-remarks" className="textarea" rows={2} placeholder="e.g. Paid with September 2026 salary" value={encash.remarks} onChange={(e) => setEncash((s) => ({ ...s, remarks: e.target.value }))} disabled={isPending} />
+            </Field>
+          </div>
+          <div className="form-footer">
+            <button type="button" className="btn btn-secondary" onClick={() => setEncashOpen(false)} disabled={isPending}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={isPending || !encash.employee_id}>{isPending ? 'Saving…' : 'Encash'}</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Attachment viewer ───────────────────────────────────────────── */}
+      <Modal isOpen={!!viewing} onClose={() => setViewing(null)} labelledBy={previewTitle} maxWidth="860px" zIndex={200}>
+        {viewing?.attachment_path && (
+          <>
+            <DialogHeader id={previewTitle} title={`Attachment · ${viewing.name}`} description={formatDisplayRange(viewing.start_date, viewing.end_date)} onClose={() => setViewing(null)} />
+            <div style={{ background: 'var(--surface-muted)', borderRadius: 'var(--radius-md)', padding: '0.75rem', display: 'grid', placeItems: 'center' }}>
+              {viewing.attachment_path.toLowerCase().endsWith('.pdf') ? (
+                <iframe title="Attachment preview" src={viewing.attachment_path} style={{ width: '100%', height: '65vh', border: 'none' }} />
+              ) : (
+                <img src={viewing.attachment_path} alt={`Attachment for ${viewing.name}`} style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }} />
+              )}
+            </div>
+            <div className="form-footer">
+              <a className="btn btn-secondary" href={`${viewing.attachment_path}?download=1`}><Download size={16} aria-hidden /> Download</a>
+              <button type="button" className="btn btn-primary" onClick={() => setViewing(null)}>Close</button>
+            </div>
+          </>
+        )}
+      </Modal>
+    </>
   );
 }

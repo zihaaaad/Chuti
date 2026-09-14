@@ -32,11 +32,14 @@ If you've noticed a bug or have a feature request, please make sure to check our
   git checkout -b feature/my-awesome-feature
   ```
 - Make your changes.
-- **Run Linting**: Before committing, ensure your code passes ESLint and TypeScript checks:
+- **Run the checks** before committing. CI runs the same three:
   ```bash
   npm run lint
-  npx tsc --noEmit
+  npm run typecheck
+  npm test
   ```
+- **Leave rules belong in `src/lib/domain/`** as pure functions with tests. Server Actions should only validate input (zod schemas in `src/lib/validation.ts`), call `adminAction`, and do their writes inside `withTransaction`.
+- **Schema changes** go in a new entry at the end of `src/lib/migrations.ts`. Never edit a migration that has shipped.
 - Commit your changes with clear, descriptive commit messages.
 - Push to your fork and submit a Pull Request against the `master` branch.
 

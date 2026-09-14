@@ -15,7 +15,7 @@
  *  7. Guarantee clean shutdown — kill the child process when the window closes.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, safeStorage } = require('electron');
 const path  = require('path');
 const fs    = require('fs');
 const net   = require('net');
@@ -38,6 +38,9 @@ let appPort     = STARTING_PORT;
 let dataDir     = null;
 let tray        = null;
 let isQuitting  = false;
+// Per-launch secret for the server's internal routes (e.g. choosing the backup
+// folder). Only this process and the server it starts know it.
+const INTERNAL_TOKEN = require('crypto').randomBytes(32).toString('hex');
 
 // ─── Single-instance lock ──────────────────────────────────────────────────────
 // Without this, double-clicking the desktop shortcut twice (or running the
@@ -158,17 +161,113 @@ function waitForServer(port, timeout) {
   });
 }
 
-// ─── Folder-picker dialog ─────────────────────────────────────────────────────
-async function pickDataFolder(parentWindow) {
-  const result = await dialog.showOpenDialog(parentWindow || null, {
-    title: 'Select Chuti Data Folder',
-    message: 'Choose a folder where Chuti will store the database, backups, and uploaded files.',
-    properties: ['openDirectory', 'createDirectory'],
-    buttonLabel: 'Use This Folder',
-  });
+// ─── External links ───────────────────────────────────────────────────────────
+function isSafeExternalUrl(url) {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch (_) {
+    return false;
+  }
+}
 
-  if (result.canceled || !result.filePaths.length) return null;
-  return result.filePaths[0];
+// ─── Auto-update ──────────────────────────────────────────────────────────────
+// Uses the GitHub releases electron-builder already publishes. Only the
+// installed (NSIS) build can update itself; the portable EXE is skipped.
+// The database is backed up by the app on every start, so an update that
+// runs a migration always has a restore point.
+function checkForUpdates(userInitiated = false) {
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) {
+    if (userInitiated) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Updates',
+        message: 'The portable version cannot update itself. Download the latest version from the GitHub releases page.',
+      }).catch(() => {});
+    }
+    return;
+  }
+  let autoUpdater;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (e) {
+    log(`electron-updater unavailable: ${e.message}`);
+    return;
+  }
+  autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} };
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.removeAllListeners();
+  autoUpdater.on('update-downloaded', (info) => {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Update ready',
+      message: `Chuti ${info.version} has been downloaded.`,
+      detail: 'It will be installed the next time you close Chuti. Restart now to install it immediately.',
+      buttons: ['Restart now', 'Later'],
+      defaultId: 1,
+    }).then(({ response }) => {
+      if (response === 0) { isQuitting = true; autoUpdater.quitAndInstall(); }
+    }).catch(() => {});
+  });
+  if (userInitiated) {
+    autoUpdater.once('update-not-available', () => {
+      dialog.showMessageBox(mainWindow, { type: 'info', title: 'Updates', message: `You have the latest version (${app.getVersion()}).` }).catch(() => {});
+    });
+    autoUpdater.once('error', (err) => {
+      dialog.showMessageBox(mainWindow, { type: 'warning', title: 'Updates', message: 'Could not check for updates.', detail: err ? err.message : '' }).catch(() => {});
+    });
+  }
+  autoUpdater.checkForUpdates().catch((err) => log(`Update check failed: ${err.message}`));
+}
+
+// ─── Folder-picker dialog ─────────────────────────────────────────────────────
+// Keep in sync with src/lib/sync-folders.ts (the server shows the same warning in Settings).
+function cloudSyncProvider(folder) {
+  const lower = path.resolve(folder).toLowerCase();
+  for (const key of ['OneDrive', 'OneDriveConsumer', 'OneDriveCommercial']) {
+    const root = process.env[key];
+    if (root && (lower === path.resolve(root).toLowerCase() || lower.startsWith(path.resolve(root).toLowerCase() + path.sep))) return 'OneDrive';
+  }
+  const patterns = [
+    [/^onedrive( - .+)?$/i, 'OneDrive'], [/^(google drive|googledrive|my drive|shared drives)$/i, 'Google Drive'],
+    [/^dropbox( \(.+\))?$/i, 'Dropbox'], [/^(icloud ?drive|icloud)$/i, 'iCloud Drive'], [/^box( sync)?$/i, 'Box'],
+  ];
+  for (const segment of path.resolve(folder).split(/[\\/]+/)) {
+    for (const [re, name] of patterns) if (re.test(segment)) return name;
+  }
+  return null;
+}
+
+async function pickDataFolder(parentWindow) {
+  for (;;) {
+    const result = await dialog.showOpenDialog(parentWindow || null, {
+      title: 'Select Chuti Data Folder',
+      message: 'Choose a folder on this computer where Chuti will store the database, backups, and uploaded files.',
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Use This Folder',
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    const chosen = result.filePaths[0];
+
+    // A live SQLite database must not sit in a cloud-synced folder: the sync
+    // client uploads it unencrypted, and syncing its WAL files can corrupt it.
+    const provider = cloudSyncProvider(chosen);
+    if (!provider) return chosen;
+    const { response } = await dialog.showMessageBox(parentWindow || null, {
+      type: 'warning',
+      title: 'This folder is synced to the cloud',
+      message: `This folder is synced to ${provider}.`,
+      detail: `Chuti's live database, including staff details and medical attachments, would be uploaded to ${provider} unencrypted, and syncing a database that is in use can corrupt it.\n\nChoose a local folder such as C:\\ChutiData instead. To keep a copy in ${provider}, use Settings → Backup copies, which can encrypt the copies.`,
+      buttons: ['Choose another folder', 'Use it anyway'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (response === 1) {
+      log(`Data folder inside ${provider} chosen despite warning: ${chosen}`);
+      return chosen;
+    }
+  }
 }
 
 // ─── Spawn Next.js server ─────────────────────────────────────────────────────
@@ -199,14 +298,14 @@ function spawnServer(port, appDataDir) {
     HOSTNAME:     '0.0.0.0',
     APP_DATA_DIR: appDataDir,
     NODE_ENV:     'production',
+    CHUTI_INTERNAL_TOKEN: INTERNAL_TOKEN,
+    CHUTI_APP_VERSION:    app.getVersion(),
   };
 
   log(`Spawning server: ${serverPath} ${args.slice(1).join(' ')}`);
   log(`APP_DATA_DIR: ${appDataDir}  PORT: ${port}`);
 
-  const proc = isProd
-    ? spawn(process.execPath, args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    : spawn(process.execPath, args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  const proc = spawn(process.execPath, args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'] });
 
   proc.stdout.on('data', (d) => log(`[server] ${d.toString().trim()}`));
   proc.stderr.on('data', (d) => log(`[server ERR] ${d.toString().trim()}`));
@@ -274,7 +373,8 @@ function createWindow(port) {
       label: 'View',
       submenu: [
         { role: 'reload' },
-        { role: 'toggleDevTools' },
+        // Developer tools only when running from source.
+        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
@@ -312,12 +412,17 @@ function createWindow(port) {
           click: () => shell.openPath(LOG_FILE),
         },
         {
+          label: 'Check for Updates…',
+          enabled: app.isPackaged,
+          click: () => checkForUpdates(true),
+        },
+        {
           label: 'About Chuti',
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type:    'info',
               title:   'About Chuti',
-              message: 'Chuti — Leave Management System\nVersion 1.0.0\n\nA lightweight, offline-first leave management system for small organisations.',
+              message: `Chuti — Leave Management System\nVersion ${app.getVersion()}\n\nOffline-first leave management for small organisations.\n\nData folder:\n${dataDir}`,
               buttons: ['OK'],
             });
           },
@@ -333,25 +438,36 @@ function createWindow(port) {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
 
-    // Show LAN info overlay as a notification-style dialog once on first load
-    const lanURL = `http://${lanIP}:${port}`;
-    dialog.showMessageBox(mainWindow, {
-      type:    'info',
-      title:   'Chuti is Running',
-      message: `✅  Application started successfully!\n\n📡  Network URL for staff:\n     ${lanURL}\n\n💾  Data folder:\n     ${dataDir}\n\nShare the Network URL with your team members on the same Wi-Fi.`,
-      buttons: ['OK — Let me work!'],
-      icon: fs.existsSync(path.join(__dirname, 'public', 'icon.png'))
-        ? path.join(__dirname, 'public', 'icon.png')
-        : undefined,
-    }).catch(() => {});
+    // Explain LAN sharing once, on the first launch only. The URL stays
+    // available under Network in the menu afterwards.
+    const cfg = loadConfig() || {};
+    if (!cfg.welcomeShown) {
+      const lanURL = `http://${lanIP}:${port}`;
+      dialog.showMessageBox(mainWindow, {
+        type:    'info',
+        title:   'Chuti is running',
+        message: 'Chuti is ready.',
+        detail:  `Colleagues on the same network can open:\n${lanURL}\n\nYour data is stored in:\n${dataDir}\n\nYou can find both again under Network and Help in the menu.`,
+        buttons: ['OK'],
+      }).catch(() => {});
+      saveConfig({ ...cfg, welcomeShown: true });
+    }
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  // Intercept external link clicks — open them in the default browser
+  // Only ever hand http(s) links to the OS. Anything else (file:, javascript:,
+  // custom protocol handlers) is refused so page content can't launch programs.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isSafeExternalUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const target = new URL(url);
+    if (target.hostname !== 'localhost' || target.port !== String(port)) {
+      event.preventDefault();
+      if (isSafeExternalUrl(url)) shell.openExternal(url);
+    }
   });
 
   return mainWindow;
@@ -462,6 +578,8 @@ app.whenReady().then(async () => {
       process.env.HOSTNAME = '0.0.0.0';
       process.env.APP_DATA_DIR = dataDir;
       process.env.NODE_ENV = 'production';
+      process.env.CHUTI_INTERNAL_TOKEN = INTERNAL_TOKEN;
+      process.env.CHUTI_APP_VERSION = app.getVersion();
       
       // Set NODE_PATH so the out-of-asar server.js can resolve dependencies in app.asar/node_modules
       const appNodeModules = path.join(__dirname, 'node_modules');
@@ -483,9 +601,15 @@ app.whenReady().then(async () => {
     await waitForServer(appPort, READY_TIMEOUT);
     log('Server is ready.');
 
-    // 5. Open main window, close splash
+    // 5. Re-arm the backup encryption key so scheduled copies keep working.
+    await loadBackupKeyIntoServer();
+
+    // 6. Open main window, close splash
     createWindow(appPort);
     splash.destroy();
+
+    // 7. Look for updates in the background (never blocks startup, silent offline).
+    setTimeout(() => checkForUpdates(false), 15_000);
 
   } catch (err) {
     log(`Fatal startup error: ${err.message}`);
@@ -530,10 +654,121 @@ app.on('activate', () => {
   }
 });
 
-// ─── IPC handlers (for future preload bridge) ─────────────────────────────────
+// ─── IPC handlers (preload bridge) ────────────────────────────────────────────
+// Only the app's own window, showing the local server, may call these.
+function fromAppWindow(event) {
+  try {
+    const url = new URL(event.senderFrame.url);
+    return url.hostname === 'localhost' && url.port === String(appPort);
+  } catch (_) {
+    return false;
+  }
+}
+
 ipcMain.handle('get-lan-url', () => `http://${getLanIP()}:${appPort}`);
 ipcMain.handle('get-data-dir', () => dataDir);
 ipcMain.handle('get-port',     () => appPort);
 ipcMain.handle('open-data-dir', () => shell.openPath(dataDir));
+
+/**
+ * Calls an internal server route with the per-launch secret and the app
+ * window's session cookie, so the server can check that an admin is signed in.
+ */
+async function internalPost(route, body) {
+  const url = `http://localhost:${appPort}`;
+  let cookieHeader = '';
+  try {
+    const cookies = await (mainWindow ? mainWindow.webContents.session : require('electron').session.defaultSession).cookies.get({ url });
+    cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+  } catch (_) {}
+  const res = await fetch(`${url}${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-chuti-internal': INTERNAL_TOKEN, ...(cookieHeader ? { Cookie: cookieHeader } : {}) },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || `Chuti refused the request (${res.status}).` };
+}
+
+ipcMain.handle('choose-backup-folder', async (event) => {
+  if (!fromAppWindow(event)) return { ok: false, error: 'Not allowed.' };
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose where to save Chuti backup copies',
+    message: 'Pick a second drive, a USB drive, or a Google Drive / OneDrive synced folder.',
+    properties: ['openDirectory', 'createDirectory'],
+    buttonLabel: 'Save backups here',
+  });
+  if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
+  const folder = result.filePaths[0];
+  const outcome = await internalPost('/api/internal/backup-folder', { folder });
+  if (outcome.ok) saveConfig({ ...(loadConfig() || {}), backupFolder: folder });
+  log(`Backup folder ${outcome.ok ? 'set to' : 'rejected:'} ${folder}`);
+  return outcome.ok ? { ok: true, folder } : outcome;
+});
+
+// ─── Backup encryption key store ──────────────────────────────────────────────
+// The unlocked backup master key is kept outside the data folder (which may be
+// copied, synced or backed up), encrypted with Windows DPAPI via safeStorage:
+// readable only by this Windows user on this computer. It lets scheduled copies
+// run after a restart without asking for the backup password.
+const KEY_FILE = path.join(CONFIG_DIR, 'backup-key.dat');
+
+function storeBackupKey(keyId, key) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      log('safeStorage unavailable: the backup password will be needed after each restart.');
+      return false;
+    }
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(KEY_FILE, safeStorage.encryptString(JSON.stringify({ keyId, key })));
+    return true;
+  } catch (e) {
+    log(`Could not store backup key: ${e.message}`);
+    return false;
+  }
+}
+
+function forgetBackupKey() {
+  try { fs.rmSync(KEY_FILE, { force: true }); } catch (_) {}
+}
+
+async function loadBackupKeyIntoServer() {
+  try {
+    if (!fs.existsSync(KEY_FILE) || !safeStorage.isEncryptionAvailable()) return;
+    const { keyId, key } = JSON.parse(safeStorage.decryptString(fs.readFileSync(KEY_FILE)));
+    const result = await internalPost('/api/internal/backup-encryption', { action: 'load', keyId, key });
+    if (!result.ok || result.ok === false) log('Stored backup key was not accepted (protection changed or data restored elsewhere).');
+  } catch (e) {
+    log(`Could not load stored backup key: ${e.message}`);
+  }
+}
+
+async function encryptionAction(event, body, { keepKey = true } = {}) {
+  if (!fromAppWindow(event)) return { ok: false, error: 'Not allowed.' };
+  const result = await internalPost('/api/internal/backup-encryption', body);
+  if (!result.ok) return { ok: false, error: result.error };
+  let remembered = false;
+  if (keepKey && result.key && result.keyId) remembered = storeBackupKey(result.keyId, result.key);
+  if (!keepKey) forgetBackupKey();
+  log(`Backup encryption: ${body.action} succeeded`);
+  // Never hand the raw key to the web page; it only needs the recovery code once.
+  return { ok: true, recoveryCode: result.recoveryCode, remembered };
+}
+
+ipcMain.handle('backup-encryption-enable', (event, password) =>
+  encryptionAction(event, { action: 'enable', password: String(password || '') }));
+ipcMain.handle('backup-encryption-change', (event, current, password) =>
+  encryptionAction(event, { action: 'change', current: String(current || ''), password: String(password || '') }));
+ipcMain.handle('backup-encryption-unlock', (event, secret) =>
+  encryptionAction(event, { action: 'unlock', secret: String(secret || '') }));
+ipcMain.handle('backup-encryption-disable', (event) =>
+  encryptionAction(event, { action: 'disable' }, { keepKey: false }));
+
+ipcMain.handle('open-backup-folder', (event) => {
+  if (!fromAppWindow(event)) return false;
+  const folder = (loadConfig() || {}).backupFolder;
+  if (folder && fs.existsSync(folder)) { shell.openPath(folder); return true; }
+  return false;
+});
 
 } // end of `else` block guarded by gotSingleInstanceLock — see top of file

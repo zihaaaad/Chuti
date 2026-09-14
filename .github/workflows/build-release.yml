@@ -17,6 +17,7 @@ on:
       - 'tsconfig.json'
       - 'next.config.ts'
       - 'eslint.config.mjs'
+      - 'vitest.config.mts'
       - 'main.js'
       - 'preload.js'
       - '.github/workflows/build-release.yml'
@@ -68,6 +69,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build Next.js (standalone)
         run: npm run build
 
@@ -111,6 +115,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm test
+
       # ── 5. Build Next.js standalone output ────────────────────────────────
       - name: Build Next.js (standalone)
         run: npm run build
@@ -147,29 +154,17 @@ jobs:
         shell: pwsh
         run: Get-ChildItem dist -Recurse -File | Select-Object FullName, Length
 
-      # ── 10. Rename and Copy artifacts for consistent download links ────────
-      - name: Rename and Copy artifacts
+      # ── 10. Copy versioned artifacts to stable names for landing-page links ─
+      # package.json pins artifactName to Chuti-Setup-<ver>.exe / Chuti-Portable-<ver>.exe,
+      # which is also what latest.yml references — so the versioned files must NOT be renamed,
+      # or the in-app auto-updater (electron-updater) will 404.
+      - name: Copy artifacts to stable names
         shell: pwsh
         run: |
           $ver = "${{ steps.pkg.outputs.VERSION }}"
-
-          # Handle installer
-          $setup = Get-ChildItem dist -Filter "*Setup*.exe" | Select-Object -First 1
-          if ($setup) {
-            # Copy to generic name so landing page latest links don't break
-            Copy-Item $setup.FullName "dist\Chuti-Setup.exe"
-            Rename-Item $setup.FullName "Chuti-Setup-$ver.exe"
-            echo "Prepared assets: Chuti-Setup.exe and Chuti-Setup-$ver.exe"
-          }
-
-          # Handle portable (exclude the newly copied Chuti-Setup.exe)
-          $portable = Get-ChildItem dist -Filter "*.exe" | Where-Object { $_.Name -notlike "*Setup*" -and $_.Name -notlike "Chuti-Setup.exe" } | Select-Object -First 1
-          if ($portable) {
-            # Copy to generic name so landing page latest links don't break
-            Copy-Item $portable.FullName "dist\Chuti-Portable.exe"
-            Rename-Item $portable.FullName "Chuti-Portable-$ver.exe"
-            echo "Prepared assets: Chuti-Portable.exe and Chuti-Portable-$ver.exe"
-          }
+          Copy-Item "dist\Chuti-Setup-$ver.exe" "dist\Chuti-Setup.exe"
+          Copy-Item "dist\Chuti-Portable-$ver.exe" "dist\Chuti-Portable.exe"
+          if (-not (Test-Path "dist\latest.yml")) { throw "latest.yml was not generated; auto-update would break." }
 
       # ── 11. Upload as workflow artifacts (for manual download too) ─────────
       - name: Upload build artifacts
@@ -222,7 +217,9 @@ jobs:
           files: |
             dist/Chuti-Setup.exe
             dist/Chuti-Setup-*.exe
+            dist/Chuti-Setup-*.exe.blockmap
             dist/Chuti-Portable.exe
             dist/Chuti-Portable-*.exe
+            dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

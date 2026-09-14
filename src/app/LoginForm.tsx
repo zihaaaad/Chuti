@@ -1,125 +1,59 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { handleLogin } from './actions';
-import { Lock, ArrowRight, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Lock } from 'lucide-react';
+import { handleLogin } from './actions/auth';
+import { Alert } from '@/components/ui';
 
 export default function LoginForm() {
   const router = useRouter();
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [state, formAction, isPending] = useActionState(handleLogin, null);
+  const [show, setShow] = useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!password) {
-      setError('Please enter your password.');
-      return;
-    }
-
-    startTransition(async () => {
-      const formData = new FormData();
-      formData.append('password', password);
-      
-      const res = await handleLogin(null, formData);
-      if (res.success) {
-        router.push('/dashboard');
-        router.refresh();
-      } else {
-        setError(res.error || 'Login failed.');
-      }
-    });
-  };
+  useEffect(() => {
+    if (state?.success) router.refresh();
+  }, [state, router]);
 
   return (
-    <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {error && (
-        <div className="popup-scale-in" style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          color: '#ef4444',
-          padding: '0.875rem 1rem',
-          borderRadius: 'var(--radius-md)',
-          fontSize: '0.875rem',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          fontWeight: '500'
-        }}>
-          <AlertCircle size={18} />
-          {error}
-        </div>
+    <form action={formAction} className="form-grid">
+      {state && !state.success && (
+        <Alert tone="danger" live>
+          {state.error}
+        </Alert>
       )}
-      
-      <div className="form-group" style={{ marginBottom: 0 }}>
-        <label className="form-label" htmlFor="username" style={{ fontWeight: '600', color: '#374151' }}>Username</label>
-        <div style={{ position: 'relative' }}>
-          <input 
-            className="form-control" 
-            type="text" 
-            id="username" 
-            value="admin" 
-            disabled 
-            style={{ 
-              backgroundColor: '#f3f4f6', 
-              color: '#9ca3af', 
-              cursor: 'not-allowed',
-              paddingLeft: '1rem',
-              fontWeight: '500',
-              border: '1px solid #e5e7eb'
-            }}
-          />
-        </div>
-      </div>
 
-      <div className="form-group" style={{ marginBottom: 0 }}>
-        <label className="form-label" htmlFor="password" style={{ fontWeight: '600', color: '#374151' }}>Password</label>
-        <div style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', display: 'flex' }}>
-            <Lock size={18} />
-          </div>
-          <input 
-            className="form-control" 
-            type="password" 
-            id="password" 
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={isPending}
+      <div className="field">
+        <label className="field-label" htmlFor="password">Password</label>
+        <div className="input-with-icon" style={{ position: 'relative' }}>
+          <Lock size={16} aria-hidden />
+          <input
+            className="input"
+            type={show ? 'text' : 'password'}
+            id="password"
+            name="password"
+            autoComplete="current-password"
+            required
             autoFocus
-            style={{ 
-              paddingLeft: '2.75rem',
-              fontWeight: '500',
-              transition: 'all 0.2s',
-              border: '1px solid #d1d5db',
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-            }}
+            disabled={isPending}
+            aria-invalid={state && !state.success ? true : undefined}
+            style={{ paddingRight: '2.5rem' }}
           />
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setShow((s) => !s)}
+            aria-label={show ? 'Hide password' : 'Show password'}
+            aria-pressed={show}
+            style={{ position: 'absolute', right: 3, top: 3, width: 32, height: 32 }}
+          >
+            {show ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+          </button>
         </div>
       </div>
 
-      <button 
-        className="btn btn-primary" 
-        type="submit" 
-        disabled={isPending}
-        style={{ 
-          width: '100%', 
-          padding: '0.875rem', 
-          marginTop: '0.5rem',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: '0.5rem',
-          fontWeight: '600',
-          fontSize: '0.9375rem',
-          boxShadow: '0 4px 6px -1px rgba(46, 139, 87, 0.2), 0 2px 4px -1px rgba(46, 139, 87, 0.1)'
-        }}
-      >
-        {isPending ? 'Authenticating...' : 'Sign In to Console'}
-        {!isPending && <ArrowRight size={18} />}
+      <button className="btn btn-primary btn-block" type="submit" disabled={isPending}>
+        {isPending ? 'Signing in…' : 'Sign in'}
       </button>
     </form>
   );
