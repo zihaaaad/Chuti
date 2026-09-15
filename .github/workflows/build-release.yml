@@ -22,6 +22,7 @@ on:
       - 'vitest.config.mts'
       - 'main.js'
       - 'preload.js'
+      - 'electron/**'
       - 'start.bat'
       - '.github/workflows/build-release.yml'
   push:
@@ -39,6 +40,7 @@ on:
       - 'vitest.config.mts'
       - 'main.js'
       - 'preload.js'
+      - 'electron/**'
       - 'start.bat'
       - '.github/workflows/build-release.yml'
     tags:
@@ -236,19 +238,30 @@ jobs:
             | **Chuti-Setup-${{ steps.pkg.outputs.VERSION }}.exe** | Installer (recommended) — installs to your chosen folder with a desktop shortcut |
             | **Chuti-Portable-${{ steps.pkg.outputs.VERSION }}.exe** | Portable — run from anywhere, no install needed |
 
+            ### What's new in 1.1
+            - **Team calendar**: month view of who is on leave each day, by department, printable.
+            - **Excel export**: payroll summary and leave ledger as a real .xlsx workbook.
+            - **Custom leave types**: add types such as Study Leave with their own quota, pay rule and colour.
+            - **Late arrivals by date**, with the monthly Casual Leave cut recalculated automatically.
+            - **Holiday import** from a CSV file, with a preview.
+            - **Cloud backup** to Google Drive or OneDrive (encrypted, optional).
+            - Security hardening: attachments require sign-in, hashed sessions, encrypted backup copies, and the app is reachable only from this computer until you turn on LAN access.
+
+            See [CHANGELOG.md](https://github.com/zihaaaad/Chuti/blob/master/CHANGELOG.md) for the full list.
+
             ### First Launch
-            On first launch, Chuti will ask you to choose a **data folder** where your database, backups, and uploaded files will be stored. This folder is yours — Chuti never deletes it.
+            On first launch, Chuti asks you to choose a **data folder** for your database and attachments. Use a local folder such as `C:\ChutiData`, not a OneDrive or Google Drive folder. Then set up **Settings → Backup copies** or **Cloud backup**.
 
             ### Updating from an older version?
-            Chuti automatically backs up your database before running any migration, and you can restore any backup from **Settings → Restore Backup** if anything looks wrong after updating. Your data folder is never touched by installing a new version.
+            Chuti saves a restore point before running any database update, and your data folder is never touched by installing a new version. If anything looks wrong, restore it from **Settings → Quick restore points**.
 
             ### System Requirements
             - Windows 10 / 11 (64-bit)
-            - No internet connection required
+            - No internet connection required (only for cloud backup and updates)
             - No admin rights needed (per-user install)
 
             ### LAN Sharing
-            After starting, a popup will show the **Network URL** (e.g. `http://192.168.1.x:3000`). Share this with your team on the same Wi-Fi so they can access the app from their browsers.
+            Chuti is reachable only from this computer by default. To let colleagues on the same network use it from their browsers, open **Network → Allow Access from Other Computers** in the app menu; the same menu shows the address to share. Installs that already shared over the network keep doing so after updating.
 
             ---
             *Built automatically from commit `${{ github.sha }}`*
