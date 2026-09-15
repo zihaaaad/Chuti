@@ -19,6 +19,7 @@ const ENTITIES: Record<string, string> = {
   department: 'Department',
   backup: 'Backup',
   leave_year: 'Leave year',
+  leave_type: 'Leave type',
   auth: 'Security',
 };
 

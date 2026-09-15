@@ -8,11 +8,12 @@ import { logAudit } from '@/lib/audit';
 import { attachmentError, deleteAttachment, saveAttachment } from '@/lib/attachments';
 import { assertOpenLeaveYear } from '@/lib/ledger';
 import { readPolicy, readSettings } from '@/lib/settings';
-import { encashmentSchema, lateSchema, leavePreviewSchema, leaveSchema } from '@/lib/validation';
+import { encashmentSchema, leavePreviewSchema, leaveSchema } from '@/lib/validation';
 import { breakdownLeaveDays, exceedsMaxSpan, MAX_LEAVE_SPAN_DAYS, type DayBreakdown } from '@/lib/domain/leave-days';
 import { hasOverlapConflict } from '@/lib/domain/overlap';
-import { lateDeduction, remainingDays } from '@/lib/domain/balance';
-import { ENCASHMENT_TYPE, hasQuota, leaveTypeInfo } from '@/lib/domain/leave-types';
+import { remainingDays } from '@/lib/domain/balance';
+import { EARNED, ENCASHMENT_TYPE, UNLIMITED_ALLOCATION, leaveTypeInfo, type LeaveTypeDef } from '@/lib/domain/leave-types';
+import { readLeaveTypes, requireActiveLeaveType } from '@/lib/leave-type-store';
 import { formatDisplayRange, todayLocal } from '@/lib/domain/dates';
 
 function revalidateLeaves() {
@@ -61,7 +62,10 @@ async function chargeLeave(
   db: Database,
   input: { employee_id: number; leave_type: string; start_date: string; end_date: string; is_half_day: boolean },
   ignoreRecordId?: number,
-): Promise<number> {
+  previousType?: string,
+): Promise<{ days: number; type: LeaveTypeDef }> {
+  // Editing a record may keep a type that has since been switched off.
+  const type = await requireActiveLeaveType(db, input.leave_type, previousType);
   if (exceedsMaxSpan(input.start_date, input.end_date)) {
     throw new ActionError(`A single leave can cover at most ${MAX_LEAVE_SPAN_DAYS} days. Split longer absences into separate records.`);
   }
@@ -78,19 +82,24 @@ async function chargeLeave(
     throw new ActionError('This employee already has leave recorded on some of these dates.');
   }
 
-  if (hasQuota(input.leave_type)) {
+  // Make sure a balance row exists (e.g. a type added after this employee), so the charge is never lost.
+  await db.run(
+    'INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?) ON CONFLICT(employee_id, leave_type) DO NOTHING',
+    input.employee_id, type.code, type.hasQuota ? type.defaultAllocation : UNLIMITED_ALLOCATION,
+  );
+
+  if (type.hasQuota) {
     const balance = await getBalance(db, input.employee_id, input.leave_type);
     const available = balance ? remainingDays(balance) : 0;
     if (days > available) {
-      const info = leaveTypeInfo(input.leave_type);
       throw new ActionError(
-        `Not enough ${info.label}: ${formatDays(available)} left, ${formatDays(days)} requested. Record the extra days as Leave Without Pay.`,
+        `Not enough ${type.label}: ${formatDays(available)} left, ${formatDays(days)} requested. Record the extra days as unpaid leave.`,
       );
     }
   }
 
   await db.run('UPDATE leave_balances SET used_days = used_days + ? WHERE employee_id = ? AND leave_type = ?', days, input.employee_id, input.leave_type);
-  return days;
+  return { days, type };
 }
 
 async function refundLeave(db: Database, record: { employee_id: number; leave_type: string; actual_days: number }) {
@@ -120,14 +129,14 @@ export async function addLeaveRecord(formData: FormData): Promise<ActionResult> 
     try {
       await withTransaction(async (db) => {
         const emp = await assertActiveEmployee(db, input.employee_id);
-        const days = await chargeLeave(db, input);
+        const { days, type } = await chargeLeave(db, input);
         const res = await db.run(
           `INSERT INTO leave_records (employee_id, leave_type, start_date, end_date, actual_days, reason, attachment_path, remarks, modified_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
           input.employee_id, input.leave_type, input.start_date, input.end_date, days, input.reason, savedPath, input.remarks,
         );
         await logAudit(db, 'created', 'leave', res.lastID ?? null,
-          `${emp.name}: ${leaveTypeInfo(input.leave_type).short} ${formatDays(days)}, ${formatDisplayRange(input.start_date, input.end_date)}`);
+          `${emp.name}: ${type.short} ${formatDays(days)}, ${formatDisplayRange(input.start_date, input.end_date)}`);
       });
     } catch (err) {
       await deleteAttachment(savedPath);
@@ -160,7 +169,7 @@ export async function updateLeaveRecord(formData: FormData): Promise<ActionResul
 
         const emp = await assertActiveEmployee(db, input.employee_id);
         await refundLeave(db, old);
-        const days = await chargeLeave(db, input, recordId);
+        const { days, type } = await chargeLeave(db, input, recordId, old.leave_type);
 
         let attachment = old.attachment_path;
         if (savedPath || input.delete_attachment) {
@@ -173,7 +182,7 @@ export async function updateLeaveRecord(formData: FormData): Promise<ActionResul
           input.employee_id, input.leave_type, input.start_date, input.end_date, days, input.reason, attachment, input.remarks, recordId,
         );
         await logAudit(db, 'updated', 'leave', recordId,
-          `${emp.name}: now ${leaveTypeInfo(input.leave_type).short} ${formatDays(days)}, ${formatDisplayRange(input.start_date, input.end_date)} (was ${formatDays(old.actual_days)})`);
+          `${emp.name}: now ${type.short} ${formatDays(days)}, ${formatDisplayRange(input.start_date, input.end_date)} (was ${formatDays(old.actual_days)})`);
       });
     } catch (err) {
       await deleteAttachment(savedPath);
@@ -196,8 +205,9 @@ export async function deleteLeaveRecord(id: number): Promise<ActionResult<{ refu
       await assertOpenLeaveYear(db, rec.start_date);
       await refundLeave(db, rec);
       await db.run('DELETE FROM leave_records WHERE id = ?', id);
+      const short = leaveTypeInfo(await readLeaveTypes(db), rec.leave_type).short;
       await logAudit(db, 'deleted', rec.leave_type === ENCASHMENT_TYPE ? 'encashment' : 'leave', id,
-        `${rec.name}: removed ${leaveTypeInfo(rec.leave_type).short} ${formatDays(rec.actual_days)}, ${formatDisplayRange(rec.start_date, rec.end_date)}; refunded to balance`);
+        `${rec.name}: removed ${short} ${formatDays(rec.actual_days)}, ${formatDisplayRange(rec.start_date, rec.end_date)}; refunded to balance`);
       return rec;
     });
     await deleteAttachment(record.attachment_path);
@@ -214,7 +224,7 @@ export async function logLeaveEncashment(formData: FormData): Promise<ActionResu
       if (!emp) throw new ActionError('This employee no longer exists.');
       const today = todayLocal();
       await assertOpenLeaveYear(db, today);
-      const balance = await getBalance(db, input.employee_id, 'Earned');
+      const balance = await getBalance(db, input.employee_id, EARNED);
       const available = balance ? remainingDays(balance) : 0;
       if (input.encash_days > available) {
         throw new ActionError(`${emp.name} has ${formatDays(available)} of Earned Leave available to encash.`);
@@ -260,7 +270,8 @@ export async function previewLeave(input: {
     if (v.employee_id) {
       const existing = await overlappingLeaves(db, v.employee_id, v.start_date, end);
       overlap = hasOverlapConflict(v.start_date, end, v.is_half_day, existing, v.ignore_record_id);
-      if (hasQuota(v.leave_type)) {
+      const type = (await readLeaveTypes(db)).find((t) => t.code === v.leave_type);
+      if (type?.hasQuota) {
         const balance = await getBalance(db, v.employee_id, v.leave_type);
         balanceBefore = balance ? remainingDays(balance) : 0;
         if (v.ignore_record_id) {
@@ -282,50 +293,3 @@ export async function previewLeave(input: {
   });
 }
 
-export async function recordLateAttendance(formData: FormData): Promise<ActionResult<{ deducted: number; capped: boolean }>> {
-  return adminAction('Could not save late arrivals.', async () => {
-    const input = parseInput(lateSchema, formData);
-    const result = await withTransaction(async (db) => {
-      const emp = await db.get<{ name: string }>('SELECT name FROM employees WHERE id = ?', input.employee_id);
-      if (!emp) throw new ActionError('This employee no longer exists.');
-      await assertOpenLeaveYear(db, `${input.month_year}-01`);
-
-      const { lateThreshold } = await readSettings(db);
-      const existing = await db.get<{ id: number; late_count: number; deducted_cl: number }>(
-        'SELECT id, late_count, deducted_cl FROM late_deductions WHERE employee_id = ? AND month_year = ?', input.employee_id, input.month_year,
-      );
-      const previous = existing?.deducted_cl ?? 0;
-      await db.run("UPDATE leave_balances SET used_days = MAX(0, used_days - ?) WHERE employee_id = ? AND leave_type = 'Casual'", previous, input.employee_id);
-
-      // Never cut more CL than is left: a deduction cannot push the balance negative.
-      const balance = await getBalance(db, input.employee_id, 'Casual');
-      const available = Math.max(0, balance ? remainingDays(balance) : 0);
-      const wanted = lateDeduction(input.late_count, lateThreshold);
-      const deducted = Math.min(wanted, Math.floor(available * 2) / 2);
-
-      if (existing) {
-        await db.run('UPDATE late_deductions SET late_count = ?, deducted_cl = ? WHERE id = ?', input.late_count, deducted, existing.id);
-      } else {
-        await db.run('INSERT INTO late_deductions (employee_id, month_year, late_count, deducted_cl) VALUES (?, ?, ?, ?)', input.employee_id, input.month_year, input.late_count, deducted);
-      }
-      await db.run("UPDATE leave_balances SET used_days = used_days + ? WHERE employee_id = ? AND leave_type = 'Casual'", deducted, input.employee_id);
-      await logAudit(db, existing ? 'updated' : 'created', 'late', input.employee_id,
-        `${emp.name}: ${input.late_count} late arrivals in ${input.month_year} → ${formatDays(deducted)} CL cut${deducted < wanted ? ` (capped from ${wanted}, CL exhausted)` : ''}`);
-      return { deducted, capped: deducted < wanted };
-    });
-    revalidateLeaves();
-    return result;
-  });
-}
-
-/** Current late count for the logger, so re-entering a month shows what is already saved. */
-export async function getLateCount(employeeId: number, monthYear: string): Promise<ActionResult<{ lateCount: number; deducted: number } | null>> {
-  return adminAction('Could not load late arrivals.', async () => {
-    const input = parseInput(lateSchema.pick({ employee_id: true, month_year: true }), { employee_id: employeeId, month_year: monthYear });
-    const db = await getDb();
-    const row = await db.get<{ late_count: number; deducted_cl: number }>(
-      'SELECT late_count, deducted_cl FROM late_deductions WHERE employee_id = ? AND month_year = ?', input.employee_id, input.month_year,
-    );
-    return row ? { lateCount: row.late_count, deducted: row.deducted_cl } : null;
-  });
-}

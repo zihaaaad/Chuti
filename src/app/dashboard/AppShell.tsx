@@ -3,21 +3,24 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, BookOpen, FileText, History, LayoutDashboard, LogOut, Menu, Settings, Users, X } from 'lucide-react';
+import { BarChart3, BookOpen, CalendarRange, FileText, History, LayoutDashboard, LogOut, Menu, Settings, Users, X } from 'lucide-react';
 import { handleLogout } from '@/app/actions/auth';
 import { useConfirm } from '@/context/ConfirmContext';
+import { LeaveTypesProvider } from '@/context/LeaveTypesContext';
+import type { LeaveTypeDef } from '@/lib/domain/leave-types';
 
 const LINKS = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/employees', label: 'Employees', icon: Users },
   { href: '/dashboard/leaves', label: 'Leave records', icon: FileText },
+  { href: '/dashboard/calendar', label: 'Team calendar', icon: CalendarRange },
   { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
   { href: '/dashboard/activity', label: 'Activity log', icon: History },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
   { href: '/dashboard/guide', label: 'User guide', icon: BookOpen },
 ];
 
-export default function AppShell({ instituteName, children }: { instituteName: string; children: ReactNode }) {
+export default function AppShell({ instituteName, leaveTypes, children }: { instituteName: string; leaveTypes: LeaveTypeDef[]; children: ReactNode }) {
   const pathname = usePathname();
   const { confirm } = useConfirm();
   const [open, setOpen] = useState(false);
@@ -71,7 +74,7 @@ export default function AppShell({ instituteName, children }: { instituteName: s
           <span className="badge badge-success">Signed in as admin</span>
         </header>
         <main id="main" className="page">
-          {children}
+          <LeaveTypesProvider types={leaveTypes}>{children}</LeaveTypesProvider>
         </main>
       </div>
     </div>

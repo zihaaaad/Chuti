@@ -47,7 +47,7 @@ You only need to install and run the application on **one host computer** (for e
 
 ### Managing Employee Directories
 *   **Manual Entry:** Go to **Employees** -> **Add Employee**. Fill in their ID code, name, designation, joining date, and select their department. Phone number and email are optional contact fields.
-*   **Custom Quotas:** You can configure custom yearly quotas (Casual Leave, Sick Leave, Earned Leave) for each employee profile.
+*   **Custom Quotas:** You can set a yearly quota for each leave type that has one (for example Casual, Sick, Earned, or a type you added) on each employee profile.
 *   **Bulk CSV Import:** To import many employees at once, click **Download Template CSV** on the Employees page, fill in the columns using Microsoft Excel or Google Sheets, and click **Upload Employees from CSV**. The template has seven columns — EmployeeID, Name, Designation, Department, Phone, JoiningDate, and Email — where Email is optional and can be left blank. Older template files saved before Email was added (six columns) still import correctly.
 
 ### Recording Leaves
@@ -57,11 +57,29 @@ You only need to install and run the application on **one host computer** (for e
 4.  **Half days:** Tick **Half day**; only one date is needed.
 5.  **Attachments:** Upload a scanned certificate or application (PDF, image or Word, up to 10 MB).
 
+### Leave Types
+Open **Settings → Leave types** to add a type such as Study Leave. Choose whether it has a yearly quota (and the default number of days), whether it is paid, and a colour. Every employee gets a balance for the new type straight away.
+*   Unpaid types are subtracted from paid days in the payroll summary.
+*   A type that already has leave recorded can't be deleted, and its quota and pay rules are fixed. Untick **In use** to hide it from new leave while keeping its history.
+*   Casual Leave, Earned Leave and Leave Without Pay are required and can't be switched off.
+
+### Late Arrivals
+On the **Overview** page, choose the employee and the date (and optionally minutes late), then **Record**. Every *N* late arrivals in a month (set in **Settings**) cut one day of Casual Leave. Remove a wrong entry from the same card or from the employee's page, and the cut is recalculated. Months recorded before dated entries existed show as a monthly total, which you can clear from the employee's page.
+
+### Holidays
+Add holidays one at a time in **Settings → Holidays**, or click **Import from file** to load a CSV (`Title, StartDate, EndDate`). Download the template, fill in the official list, click **Preview**, then **Add**. Holidays already listed are skipped. Eid and other moving holidays must be taken from that year's government list.
+
+### Team Calendar
+**Team calendar** shows a month grid with one row per employee. Coloured cells are leave; striped cells are weekends or holidays inside a leave that were not charged. The bottom row counts how many people are away each day. Filter by department, tick **Show everyone** to include people with no leave, and use **Print** for a wall copy.
+
+### Reports and Excel
+**Reports** has the monthly leave ledger and payroll summary. **Export Excel** downloads an .xlsx workbook with both sheets for the chosen month and filters; **CSV** exports just the current tab.
+
 ### Employee Statements
 Click an employee's name anywhere in Chuti to open their page: balances, every leave, encashment and late-arrival cut, and a **Print statement** button.
 
 ### Closing the Leave Year
-At year end, open **Settings → Leave year → Close leave year**. Chuti saves a backup, carries unused Earned Leave forward up to the cap, lets unused CL/SL/ML lapse, and makes the closed year's records read-only.
+At year end, open **Settings → Leave year → Close leave year**. Chuti saves a backup, carries unused Earned Leave forward up to the cap, lets every other unused quota lapse, and makes the closed year's records read-only.
 
 ---
 
@@ -70,6 +88,7 @@ At year end, open **Settings → Leave year → Close leave year**. Chuti saves 
 *   **WAL Mode Safeguards:** Chuti runs the local SQLite database in WAL (Write-Ahead Logging) mode, which protects the database if the computer loses power.
 *   **Backup copies (recommended):** In **Settings → Backup copies**, choose **Choose backup folder…** on the computer running Chuti. Pick a USB drive, a second disk, or a Google Drive / OneDrive folder that syncs to the cloud. Chuti then saves a complete copy — database **and** attachments — every day at the time you set, and keeps the newest copies (30 by default). **Back up now** makes one immediately. The Overview page warns you if copies stop working, for example when the USB drive is unplugged.
 *   **Restoring a backup copy:** **Settings → Backup copies → Restore** next to a copy. Chuti checks the file for damage, saves a copy of your current data first, and puts the attachments back. To move to a new computer, install Chuti there, choose the same backup folder, and restore the newest copy.
+*   **Cloud backup (Google Drive or OneDrive):** In **Settings → Cloud backup** on the computer running Chuti, choose **Connect Google Drive** or **Connect OneDrive** and sign in in the browser window that opens. Chuti uploads an encrypted full backup every day at the time you set (keeping the newest 30 by default), and **Back up now** uploads one immediately. Cloud backups always use your backup password. Chuti asks only for its own folder (“Chuti Backups” in Google Drive, Apps/Chuti in OneDrive) and cannot see your other files. To restore, choose **Show backups → Restore**. On a new computer, install Chuti, connect the same account and restore the newest backup. **Disconnect** stops uploads and removes the sign-in from this computer; backups already uploaded stay in the account.
 *   **Quick restore points:** Chuti also keeps database-only snapshots inside its own data folder, on every start-up and every 12 hours (latest 30). Restore them from **Settings → Quick restore points**. They live on the same drive as your data, so they are not a replacement for backup copies.
 *   **Protecting copies with a backup password (strongly recommended):** Before saving the first copy, Chuti asks you to choose. Select **Set a backup password** (at least 12 characters; a short sentence is ideal; not the admin password). Chuti then shows a **recovery code** once. Print it or write it down and keep it with important papers, not in the backup folder or the same cloud account. Every copy is then encrypted: someone who gets into your Google Drive / OneDrive or finds the USB drive cannot read it without the password or the recovery code.
 *   **After restarting Chuti** on the host computer, protected copies keep working automatically. If Settings says **Locked** (for example after moving to a new Windows account), choose **Unlock with password**.

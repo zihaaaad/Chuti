@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
+import { useActiveLeaveTypes } from '@/context/LeaveTypesContext';
 
 export interface PickerEmployee {
   id: number;
@@ -9,9 +10,12 @@ export interface PickerEmployee {
   employee_id: string;
   department?: string | null;
   cl_left?: number | null;
-  sl_left?: number | null;
-  el_left?: number | null;
+  /** Remaining days per leave type code, for the quick balance hint. */
+  balances?: Record<string, number>;
 }
+
+/** How many balance badges fit beside a name before the row gets cramped. */
+const MAX_BALANCE_BADGES = 3;
 
 interface Props {
   id: string;
@@ -39,6 +43,7 @@ export default function EmployeePicker({ id, employees, value, onChange, disable
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  const balanceTypes = useActiveLeaveTypes().filter((t) => t.hasQuota).slice(0, MAX_BALANCE_BADGES);
   const selected = employees.find((e) => String(e.id) === value) ?? null;
 
   const results = useMemo(() => {
@@ -137,11 +142,11 @@ export default function EmployeePicker({ id, employees, value, onChange, disable
               <span>
                 <strong>{emp.name}</strong> <span className="subtle">{emp.employee_id}{emp.department ? ` · ${emp.department}` : ''}</span>
               </span>
-              {showBalances && emp.cl_left != null && (
+              {showBalances && emp.balances && (
                 <span className="meta num">
-                  <span className="badge lt-casual">CL {emp.cl_left}</span>
-                  <span className="badge lt-sick">SL {emp.sl_left ?? 0}</span>
-                  <span className="badge lt-earned">EL {emp.el_left ?? 0}</span>
+                  {balanceTypes.map((t) => (
+                    <span key={t.code} className={`badge tone-${t.tone}`} title={`${t.label} left`}>{t.short} {emp.balances?.[t.code] ?? 0}</span>
+                  ))}
                 </span>
               )}
             </li>

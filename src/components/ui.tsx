@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
-import { leaveTypeInfo } from '@/lib/domain/leave-types';
 
 export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
   return (
@@ -76,15 +75,6 @@ export function fieldAria(id: string, error?: string, hasHint = false) {
     'aria-invalid': error ? true : undefined,
     'aria-describedby': error ? `${id}-error` : hasHint ? `${id}-hint` : undefined,
   } as const;
-}
-
-export function LeaveTypeBadge({ type, short = false }: { type: string; short?: boolean }) {
-  const info = leaveTypeInfo(type);
-  return (
-    <span className={`badge lt-${info.tone}`} title={info.label}>
-      {short ? info.short : type === 'Earned (Encashed)' ? 'EL encashed' : info.label}
-    </span>
-  );
 }
 
 export function StatusBadge({ status }: { status: string }) {

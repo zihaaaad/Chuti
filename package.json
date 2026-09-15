@@ -34,6 +34,9 @@
     "files": [
       "main.js",
       "preload.js",
+      "cloud-config.json",
+      "electron/**/*.js",
+      "!electron/**/*.test.*",
       "public/**/*",
       "!public/uploads/**"
     ],

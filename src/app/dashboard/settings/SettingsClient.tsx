@@ -14,6 +14,9 @@ import { Alert, DialogHeader, EmptyState, Field, fieldAria, formatDays } from '@
 import { WEEKDAYS, formatDisplayDate, formatDisplayRange } from '@/lib/domain/dates';
 import PasswordChangeForm from './PasswordChangeForm';
 import BackupCopiesCard, { type BackupCopiesView } from './BackupCopiesCard';
+import CloudBackupCard, { type CloudBackupView } from './CloudBackupCard';
+import HolidayImport from './HolidayImport';
+import LeaveTypesCard from './LeaveTypesCard';
 
 interface Props {
   settings: AppSettings;
@@ -21,7 +24,9 @@ interface Props {
   departments: { id: number; name: string; employees: number }[];
   backups: BackupFileInfo[];
   backupCopies: BackupCopiesView;
+  cloudBackup: CloudBackupView;
   closings: { id: number; closed_at: string; previous_start: string; new_start: string; el_carry_cap: number }[];
+  leaveTypeUsage: Record<string, number>;
   today: string;
 }
 
@@ -36,7 +41,7 @@ function formatSize(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function SettingsClient({ settings, holidays, departments, backups, backupCopies, closings, today }: Props) {
+export default function SettingsClient({ settings, holidays, departments, backups, backupCopies, cloudBackup, closings, leaveTypeUsage, today }: Props) {
   const router = useRouter();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
@@ -226,6 +231,8 @@ export default function SettingsClient({ settings, holidays, departments, backup
           </form>
         </section>
 
+        <LeaveTypesCard usage={leaveTypeUsage} />
+
         {/* Leave year */}
         <section className="card" aria-labelledby="year-title">
           <div className="card-head">
@@ -235,7 +242,7 @@ export default function SettingsClient({ settings, holidays, departments, backup
             </div>
           </div>
           <p style={{ marginBottom: '0.75rem' }}>
-            Closing a year saves a backup, carries unused Earned Leave forward (up to the cap), lets unused CL, SL and ML lapse, and makes older records read-only.
+            Closing a year saves a backup, carries unused Earned Leave forward (up to the cap), lets every other unused quota lapse, and makes older records read-only.
           </p>
           <button type="button" className="btn btn-secondary" onClick={openYear} disabled={isPending}>Close leave year…</button>
           {closings.length > 0 && (
@@ -267,6 +274,7 @@ export default function SettingsClient({ settings, holidays, departments, backup
               <h2 id="hol-title"><CalendarDays size={18} aria-hidden /> Holidays</h2>
               <p>Holidays are never charged as leave. Changes don&apos;t alter leave already recorded.</p>
             </div>
+            <HolidayImport />
           </div>
           <form onSubmit={submitHoliday} className="form-grid" style={{ marginBottom: '1rem' }}>
             <Field label="Holiday name" htmlFor="hol-name" required>
@@ -344,6 +352,7 @@ export default function SettingsClient({ settings, holidays, departments, backup
         </section>
 
         <BackupCopiesCard view={backupCopies} />
+        <CloudBackupCard view={cloudBackup} />
 
         {/* Backups */}
         <section className="card" aria-labelledby="backup-title">

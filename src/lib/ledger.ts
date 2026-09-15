@@ -1,34 +1,9 @@
 import 'server-only';
 import type { Database } from 'sqlite';
 import { ActionError } from './db';
-import { ENCASHMENT_TYPE, LEAVE_TYPES, UNLIMITED_ALLOCATION, type LeaveTypeCode } from './domain/leave-types';
+import { ENCASHMENT_TYPE } from './domain/leave-types';
 import { formatDisplayDate } from './domain/dates';
 import { readSettings } from './settings';
-
-export type Allocations = Record<Exclude<LeaveTypeCode, 'LWP'>, number>;
-
-/** Creates any missing balance rows and sets quotas. LWP always gets the unlimited sentinel. */
-export async function upsertAllocations(db: Database, employeeId: number, allocations: Allocations) {
-  for (const [type, days] of Object.entries(allocations)) {
-    await db.run(
-      `INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, ?, ?)
-       ON CONFLICT(employee_id, leave_type) DO UPDATE SET allocated_days = excluded.allocated_days`,
-      employeeId,
-      type,
-      days,
-    );
-  }
-  await db.run(
-    `INSERT INTO leave_balances (employee_id, leave_type, allocated_days) VALUES (?, 'LWP', ?)
-     ON CONFLICT(employee_id, leave_type) DO NOTHING`,
-    employeeId,
-    UNLIMITED_ALLOCATION,
-  );
-}
-
-export function defaultAllocations(): Allocations {
-  return Object.fromEntries(LEAVE_TYPES.filter((t) => t.code !== 'LWP').map((t) => [t.code, t.defaultAllocation])) as Allocations;
-}
 
 /** Rejects changes dated inside a leave year that has already been closed. */
 export async function assertOpenLeaveYear(db: Database, date: string) {

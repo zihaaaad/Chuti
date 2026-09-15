@@ -60,3 +60,7 @@ database.db-shm
 
 # Icon binary (generated from PNG, not tracked)
 /public/icon.ico
+
+# OAuth client registrations written by CI (scripts/write-cloud-config.js)
+/cloud-config.json
+.cloud-staging

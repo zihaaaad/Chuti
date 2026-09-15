@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import type { Database } from 'sqlite';
+import { BUILTIN_LEAVE_TYPES } from './domain/leave-types';
 
 // Versioned schema migrations. `system_settings.schema_version` records the
 // last applied version; each migration runs once, inside its own transaction.
@@ -203,6 +204,58 @@ const MIGRATIONS: Migration[] = [
     name: 'hash stored session tokens',
     up: async (db) => {
       await db.exec('DELETE FROM admin_sessions');
+    },
+  },
+  {
+    // Late arrivals are now recorded per date. late_deductions stays as the
+    // monthly summary used by payroll and balances: late_count = undated_count
+    // (totals entered before this version) + the dated rows for that month.
+    version: 4,
+    name: 'late arrivals per date',
+    up: async (db) => {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS late_arrivals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          date DATE NOT NULL,
+          minutes_late INTEGER,
+          note TEXT,
+          recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (employee_id, date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_late_arrivals_date ON late_arrivals (date);
+      `);
+      await addColumnIfMissing(db, 'late_deductions', 'undated_count', 'INTEGER DEFAULT 0');
+      await db.exec('UPDATE late_deductions SET undated_count = late_count');
+    },
+  },
+  {
+    // Leave types become data the admin can extend, seeded with the built-ins.
+    version: 5,
+    name: 'configurable leave types',
+    up: async (db) => {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS leave_types (
+          code TEXT PRIMARY KEY,
+          label TEXT NOT NULL,
+          short TEXT NOT NULL,
+          default_allocation REAL NOT NULL DEFAULT 0,
+          has_quota INTEGER NOT NULL DEFAULT 1,
+          is_paid INTEGER NOT NULL DEFAULT 1,
+          tone TEXT NOT NULL DEFAULT 'slate',
+          sort_order INTEGER NOT NULL DEFAULT 100,
+          active INTEGER NOT NULL DEFAULT 1,
+          builtin INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      for (const t of BUILTIN_LEAVE_TYPES) {
+        await db.run(
+          `INSERT OR IGNORE INTO leave_types (code, label, short, default_allocation, has_quota, is_paid, tone, sort_order, active, builtin)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+          t.code, t.label, t.short, t.defaultAllocation, t.hasQuota ? 1 : 0, t.isPaid ? 1 : 0, t.tone, t.sortOrder,
+        );
+      }
     },
   },
 ];

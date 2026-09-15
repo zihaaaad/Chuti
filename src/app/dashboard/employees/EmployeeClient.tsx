@@ -8,7 +8,7 @@ import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 import Modal from '@/components/Modal';
 import { Alert, DialogHeader, EmptyState, Field, StatusBadge, fieldAria } from '@/components/ui';
-import { QUOTA_LEAVE_TYPES } from '@/lib/domain/leave-types';
+import { useLeaveTypes } from '@/context/LeaveTypesContext';
 import { todayLocal } from '@/lib/domain/dates';
 
 export interface EmployeeRow {
@@ -30,8 +30,6 @@ interface Props {
   nextCode: string;
 }
 
-const ALLOC_FIELDS = { Casual: 'cl_allocated', Sick: 'sl_allocated', Earned: 'el_allocated', Maternity: 'ml_allocated' } as const;
-
 type FormState = {
   employee_id: string;
   name: string;
@@ -41,11 +39,23 @@ type FormState = {
   phone: string;
   email: string;
   status: string;
-} & Record<(typeof ALLOC_FIELDS)[keyof typeof ALLOC_FIELDS], string>;
+  /** Yearly quota per leave type code, as typed. */
+  alloc: Record<string, string>;
+};
+
+/** Leave type codes may contain spaces; element ids may not. */
+const allocId = (code: string) => `alloc-${code.replace(/[^A-Za-z0-9]+/g, '-')}`;
 
 export default function EmployeeClient({ employees, departments, nextCode }: Props) {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+  const allTypes = useLeaveTypes();
+  // Switched-off types keep their column only while someone still has a balance in them.
+  const quotaTypes = useMemo(
+    () => allTypes.filter((t) => t.hasQuota && (t.active || employees.some((e) => (e.balances[t.code]?.allocated ?? 0) > 0))),
+    [allTypes, employees],
+  );
+  const editableQuotaTypes = quotaTypes.filter((t) => t.active);
   const titleId = useId();
   const importTitleId = useId();
 
@@ -75,9 +85,10 @@ export default function EmployeeClient({ employees, departments, nextCode }: Pro
     setEditing(emp);
     setErrors({});
     setFormError(null);
-    const alloc = (type: keyof typeof ALLOC_FIELDS) =>
-      // `??` not `||`: a quota of 0 is a real value and must not become the default.
-      String(emp?.balances[type]?.allocated ?? QUOTA_LEAVE_TYPES.find((t) => t.code === type)!.defaultAllocation);
+    // `??` not `||`: a quota of 0 is a real value and must not become the default.
+    const alloc = Object.fromEntries(
+      editableQuotaTypes.map((t) => [t.code, String(emp?.balances[t.code]?.allocated ?? t.defaultAllocation)]),
+    );
     setForm({
       employee_id: emp?.employee_id ?? nextCode,
       name: emp?.name ?? '',
@@ -87,22 +98,22 @@ export default function EmployeeClient({ employees, departments, nextCode }: Pro
       phone: emp?.phone ?? '',
       email: emp?.email ?? '',
       status: emp?.status ?? 'Active',
-      cl_allocated: alloc('Casual'),
-      sl_allocated: alloc('Sick'),
-      el_allocated: alloc('Earned'),
-      ml_allocated: alloc('Maternity'),
+      alloc,
     });
     setFormOpen(true);
   };
 
-  const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const set = (key: Exclude<keyof FormState, 'alloc'>) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => (f ? { ...f, [key]: e.target.value } : f));
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
     const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => fd.set(k, v));
+    Object.entries(form).forEach(([k, v]) => {
+      if (typeof v === 'string') fd.set(k, v);
+    });
+    Object.entries(form.alloc).forEach(([code, v]) => fd.set(`alloc_${code}`, v));
     if (editing) fd.set('id', String(editing.id));
     startTransition(async () => {
       const res = editing ? await updateEmployee(fd) : await addEmployee(fd);
@@ -181,7 +192,7 @@ export default function EmployeeClient({ employees, departments, nextCode }: Pro
               <th>Designation</th>
               <th>Department</th>
               <th>Status</th>
-              {QUOTA_LEAVE_TYPES.map((t) => (
+              {quotaTypes.map((t) => (
                 <th key={t.code} className="num" title={`${t.label}: remaining / yearly quota`}>{t.short} left</th>
               ))}
               <th className="right no-print"><span className="sr-only">Actions</span></th>
@@ -190,7 +201,7 @@ export default function EmployeeClient({ employees, departments, nextCode }: Pro
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={5 + quotaTypes.length}>
                   {employees.length === 0 ? (
                     <EmptyState icon={<Users size={28} aria-hidden />} title="No employees yet">Add employees one at a time, or import a spreadsheet with Import CSV.</EmptyState>
                   ) : (
@@ -208,7 +219,7 @@ export default function EmployeeClient({ employees, departments, nextCode }: Pro
                   <td>{emp.designation}</td>
                   <td>{emp.department}</td>
                   <td><StatusBadge status={emp.status} /></td>
-                  {QUOTA_LEAVE_TYPES.map((t) => {
+                  {quotaTypes.map((t) => {
                     const b = emp.balances[t.code];
                     return (
                       <td key={t.code} className="num">
@@ -279,11 +290,26 @@ export default function EmployeeClient({ employees, departments, nextCode }: Pro
               <fieldset className="fieldset">
                 <legend>Yearly leave quota (days)</legend>
                 <div className="form-grid cols-4">
-                  {QUOTA_LEAVE_TYPES.map((t) => {
-                    const key = ALLOC_FIELDS[t.code as keyof typeof ALLOC_FIELDS];
+                  {editableQuotaTypes.map((t) => {
+                    const key = `alloc_${t.code}`;
+                    const id = allocId(t.code);
                     return (
-                      <Field key={t.code} label={`${t.short}`} htmlFor={`alloc-${t.code}`} error={errors[key]}>
-                        <input className="input num" type="number" min={0} max={365} step={0.5} value={form[key]} onChange={set(key)} disabled={isPending} title={t.label} {...fieldAria(`alloc-${t.code}`, errors[key])} />
+                      <Field key={t.code} label={t.short} htmlFor={id} error={errors[key]}>
+                        <input
+                          className="input num"
+                          type="number"
+                          min={0}
+                          max={365}
+                          step={0.5}
+                          value={form.alloc[t.code] ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setForm((f) => (f ? { ...f, alloc: { ...f.alloc, [t.code]: value } } : f));
+                          }}
+                          disabled={isPending}
+                          title={t.label}
+                          {...fieldAria(id, errors[key])}
+                        />
                       </Field>
                     );
                   })}

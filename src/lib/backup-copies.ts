@@ -172,29 +172,39 @@ export function runBackupCopy(trigger: 'manual' | 'scheduled'): Promise<BackupCo
   return jobs.running;
 }
 
-async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult> {
-  const db = await getDb();
-  const config = await readBackupCopyConfig(db);
-  if (!config.folder) return { ok: false, error: 'No backup folder has been chosen.' };
+export interface BuiltArchive {
+  name: string;
+  path: string;
+  size: number;
+  attachments: number;
+  encrypted: boolean;
+}
 
+/**
+ * Writes one full archive (database snapshot + attachments) into `targetDir`,
+ * encrypted when backup encryption is on. Plain intermediate files stay inside
+ * the local data folder. With `requireEncryption`, refuses to write a plain archive.
+ */
+export async function createBackupArchive(options: { targetDir: string; requireEncryption?: boolean }): Promise<BuiltArchive> {
+  const db = await getDb();
   const { DATA_DIR } = getPaths();
+  const { targetDir } = options;
   const stamp = Date.now();
   const snapshot = path.join(DATA_DIR, `.snapshot-${stamp}.db`);
   // Plain archives for encrypted copies are built here, inside the local data
-  // folder, and never in the backup folder: a sync client could upload them.
+  // folder, and never in the target folder: a sync client could upload them.
   const workDir = path.join(DATA_DIR, `.backup-work-${stamp}`);
   try {
-    if (!config.folderReachable) {
-      throw new Error(`The backup folder is not available: ${config.folder}. Reconnect the drive or choose another folder.`);
-    }
-
     const encryption = await readEncryptionState(db);
+    if (options.requireEncryption && encryption.mode !== 'on') {
+      throw new Error('Cloud backups are always encrypted. Set a backup password first (Settings → Backup copies).');
+    }
     if (encryption.mode === 'unset') {
       throw new Error('Choose how backup copies are protected (Settings → Backup copies) before Chuti saves any.');
     }
     const masterKey = encryption.mode === 'on' && encryption.keyId ? unlockedKey(encryption.keyId) : null;
     if (encryption.mode === 'on' && (!masterKey || !encryption.ring)) {
-      throw new Error('Backup copies are locked: enter the backup password in Settings → Backup copies on the Chuti computer.');
+      throw new Error('Backups are locked: enter the backup password in Settings → Backup copies on the Chuti computer.');
     }
 
     // VACUUM INTO writes a consistent, compact copy without the WAL. Hold the
@@ -211,14 +221,14 @@ async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult>
     // Names are timestamped to the second. Never reuse a timestamp that already
     // exists in either format, or a quick second copy would overwrite the first.
     let now = new Date();
-    while (['zip', 'chuti'].some((ext) => fs.existsSync(path.join(config.folder!, archiveFileName(now, ext as 'zip' | 'chuti'))))) {
+    while (['zip', 'chuti'].some((ext) => fs.existsSync(path.join(targetDir, archiveFileName(now, ext as 'zip' | 'chuti'))))) {
       await new Promise((r) => setTimeout(r, 250));
       now = new Date();
     }
     const archive = await writeArchive({
       databaseSnapshot: snapshot,
       uploadsDir: uploadsDir(),
-      targetDir: masterKey ? workDir : config.folder,
+      targetDir: masterKey ? workDir : targetDir,
       now,
       meta: {
         appVersion: process.env.CHUTI_APP_VERSION || 'source',
@@ -227,11 +237,11 @@ async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult>
         counts: { employees: employees?.c ?? 0, leaveRecords: leaveRecords?.c ?? 0 },
       },
     });
-    const result = { ...archive };
+    const attachments = archive.manifest.counts.attachments;
 
     if (masterKey && encryption.ring) {
       const name = archiveFileName(now, 'chuti');
-      const finalPath = path.join(config.folder, name);
+      const finalPath = path.join(targetDir, name);
       const partial = `${finalPath}.partial`;
       try {
         await encryptFile(path.join(workDir, archive.name), partial, masterKey, encryption.ring, now);
@@ -240,9 +250,25 @@ async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult>
         fs.rmSync(partial, { force: true });
         throw err;
       }
-      result.name = name;
-      result.size = fs.statSync(finalPath).size;
+      return { name, path: finalPath, size: fs.statSync(finalPath).size, attachments, encrypted: true };
     }
+    return { name: archive.name, path: path.join(targetDir, archive.name), size: archive.size, attachments, encrypted: false };
+  } finally {
+    fs.rmSync(snapshot, { force: true });
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult> {
+  const db = await getDb();
+  const config = await readBackupCopyConfig(db);
+  if (!config.folder) return { ok: false, error: 'No backup folder has been chosen.' };
+
+  try {
+    if (!config.folderReachable) {
+      throw new Error(`The backup folder is not available: ${config.folder}. Reconnect the drive or choose another folder.`);
+    }
+    const result = await createBackupArchive({ targetDir: config.folder });
     const pruned = pruneArchives(config.folder, config.keep);
 
     await withTransaction(async (tx) => {
@@ -252,9 +278,9 @@ async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult>
       await setSetting(tx, KEYS.lastError, '');
       await setSetting(tx, KEYS.lastErrorAt, '');
       await logAudit(tx, 'created', 'backup', result.name,
-        `${trigger === 'manual' ? 'Manual' : 'Scheduled'} ${masterKey ? 'encrypted' : 'UNENCRYPTED'} backup copy ${result.name} (${result.manifest.counts.attachments} attachments)${pruned.length ? `; removed ${pruned.length} old cop${pruned.length === 1 ? 'y' : 'ies'}` : ''}`);
+        `${trigger === 'manual' ? 'Manual' : 'Scheduled'} ${result.encrypted ? 'encrypted' : 'UNENCRYPTED'} backup copy ${result.name} (${result.attachments} attachments)${pruned.length ? `; removed ${pruned.length} old cop${pruned.length === 1 ? 'y' : 'ies'}` : ''}`);
     });
-    return { ok: true, name: result.name, size: result.size, attachments: result.manifest.counts.attachments, pruned: pruned.length, encrypted: !!masterKey };
+    return { ok: true, name: result.name, size: result.size, attachments: result.attachments, pruned: pruned.length, encrypted: result.encrypted };
   } catch (err) {
     const message = (err as Error).message || 'Unknown error';
     console.error('[backup-copy] failed:', err);
@@ -267,9 +293,6 @@ async function doRun(trigger: 'manual' | 'scheduled'): Promise<BackupCopyResult>
       // Recording the failure must not mask it.
     }
     return { ok: false, error: message };
-  } finally {
-    fs.rmSync(snapshot, { force: true });
-    fs.rmSync(workDir, { recursive: true, force: true });
   }
 }
 

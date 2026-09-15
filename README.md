@@ -12,19 +12,22 @@
   - **LAN Network Sharing:** Host the application on a primary computer, allowing all colleagues on the same office Local Area Network (LAN) to securely access the portal via their web browsers.
 - **Single-Admin Architecture:** Eliminates complex employee login flows. A single centralized administrator manages directories, records leaves, and configures settings from one intuitive interface.
 - **Automated Business Logic:**
-  - **Preconfigured Quotas:** Built-in tracking for Casual Leave (CL), Sick Leave (SL), Earned Leave (EL), and Maternity Leave (ML).
+  - **Leave Types:** Built-in Casual (CL), Sick (SL), Earned (EL), Maternity (ML) and Leave Without Pay, plus your own types (e.g. Study Leave) with a quota, pay rule and colour set in Settings.
   - **Live Day Preview:** The leave form shows the days charged, how weekends and holidays were treated, and the balance before and after — before you save.
   - **Sandwich Rule:** When enabled, weekends and holidays that fall *between* two leave days are charged.
-  - **Attendance Deductions:** Deducts Casual Leave based on a configurable monthly late-arrival threshold, never below zero.
+  - **Late Arrivals:** Log each late arrival by date; every N lates in a month cut one day of Casual Leave, never below zero.
   - **Leave Encashment:** Log and deduct encashed Earned Leave days.
   - **Leave Year Closing:** Carry unused Earned Leave forward (with a cap), lapse the rest, and lock the closed year.
+- **Team Calendar:** A month grid of who is on leave each day, with weekends, holidays and daily absence totals, filterable by department and printable.
+- **Holiday Import:** Load the government holiday list from a CSV file, with a preview that skips duplicates and invalid rows.
 - **Employee Ledger:** A page per employee with balances and every leave, encashment and late cut, printable as a statement.
 - **Activity Log:** Every change is recorded with the time and the device that made it.
 - **Document Management:** Upload scans, medical certificates, or applications directly to local storage for quick preview inside the application.
 - **Backup Copies:** Daily full copies (database + attachments, verified with checksums) saved to a folder you choose — a USB drive, a second disk, or a Google Drive / OneDrive synced folder — with retention, failure warnings and one-click restore.
+- **Cloud Backup:** Connect Google Drive or OneDrive with a browser sign-in. Chuti uploads encrypted daily backups straight to the account, using app-folder-only permissions and keeping sign-in tokens protected by Windows. See [docs/design/cloud-backup.md](docs/design/cloud-backup.md).
 - **Encrypted Backups:** Copies are encrypted with AES-256 using a backup password, with a printed recovery code for emergencies. Chuti detects cloud-synced folders and won't save copies until you choose how they are protected. See [docs/design/backup-security.md](docs/design/backup-security.md).
 - **Integrity:** Quick restore points on start-up and every 12 hours, verified restores, and a balance check that recalculates balances from the leave records.
-- **Print-Ready Reporting:** A4 landscape Leave Ledgers and Monthly Payroll Summaries (leave that spans two months is split correctly), plus Excel-compatible CSV export.
+- **Print-Ready Reporting:** A4 landscape Leave Ledgers and Monthly Payroll Summaries (leave that spans two months is split correctly), exported as real Excel (.xlsx) workbooks or CSV.
 - **Automatic Updates:** The installed desktop app updates itself from GitHub releases.
 
 ---
@@ -89,8 +92,13 @@ When running from source, use environment variables instead:
 | `CHUTI_BACKUP_PASSWORD` | Enables or unlocks encrypted copies at start-up (the recovery code is printed to the console once) |
 | `CHUTI_BACKUP_ENCRYPTION=off` | Explicitly save copies without encryption |
 
+### Cloud Backup (Google Drive / OneDrive)
+In the desktop app, open **Settings → Cloud backup**, set a backup password if you haven't, and choose **Connect Google Drive** or **Connect OneDrive**. Sign-in happens in your browser; Chuti stores only a refresh token, encrypted with Windows DPAPI in `%APPDATA%\Chuti\cloud.dat` (never in the database or its backups).
+
+Release builds read the OAuth client registrations from `cloud-config.json`, which CI writes from the repository secrets `CHUTI_GOOGLE_CLIENT_ID`, `CHUTI_GOOGLE_CLIENT_SECRET` and `CHUTI_ONEDRIVE_CLIENT_ID` (see `cloud-config.example.json`). The same values can be set as environment variables, or an admin can enter their own registration in Settings. Setup steps for both providers are in [docs/design/cloud-backup.md](docs/design/cloud-backup.md#registering-the-oauth-apps).
+
 ### Restoring Backups
-1. Open **Settings → Backup copies** (full copies with attachments) or **Quick restore points** (database only).
+1. Open **Settings → Backup copies** (full copies with attachments), **Cloud backup → Show backups**, or **Quick restore points** (database only).
 2. Choose **Restore** and type `RESTORE` to confirm.
 3. Chuti checks the file for damage, saves a copy of the current data, then restores. To undo, restore the "Before a restore" point.
 

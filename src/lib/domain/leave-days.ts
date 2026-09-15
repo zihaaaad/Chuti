@@ -118,7 +118,8 @@ export function chargedDaysWithin(record: ChargedLeave, rangeStart: ISODate, ran
   return roundToHalf((record.actual_days * inside) / total);
 }
 
-function perDayCharges(start: ISODate, end: ISODate, policy: LeavePolicy): { date: ISODate; charge: number }[] {
+/** Whether each day of a leave is charged (working day, or an off-day sandwiched under the rule). */
+export function perDayCharges(start: ISODate, end: ISODate, policy: LeavePolicy): { date: ISODate; charge: number }[] {
   const weekend = new Set(policy.weekendDays.map((d) => d.toLowerCase().trim()));
   const days = [...eachDay(start, end)].map((date) => ({
     date,

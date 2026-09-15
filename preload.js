@@ -21,4 +21,12 @@ contextBridge.exposeInMainWorld('chuti', {
   changeBackupPassword:    (current, password) => ipcRenderer.invoke('backup-encryption-change', current, password),
   unlockBackupEncryption:  (secret) => ipcRenderer.invoke('backup-encryption-unlock', secret),
   disableBackupEncryption: () => ipcRenderer.invoke('backup-encryption-disable'),
+  // Cloud backup. Tokens never reach the page.
+  cloudStatus:     () => ipcRenderer.invoke('cloud-status'),
+  cloudConnect:    (provider) => ipcRenderer.invoke('cloud-connect', provider),
+  cloudDisconnect: () => ipcRenderer.invoke('cloud-disconnect'),
+  cloudBackupNow:  () => ipcRenderer.invoke('cloud-backup-now'),
+  cloudList:       () => ipcRenderer.invoke('cloud-list'),
+  cloudRestore:    (id, name, secret, staged) => ipcRenderer.invoke('cloud-restore', id, name, secret, staged),
+  cloudSetClient:  (provider, input) => ipcRenderer.invoke('cloud-set-client', provider, input),
 });

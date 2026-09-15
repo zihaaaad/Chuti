@@ -674,11 +674,14 @@ app.whenReady().then(async () => {
     // 5. Re-arm the backup encryption key so scheduled copies keep working.
     await loadBackupKeyIntoServer();
 
-    // 6. Open main window, close splash
+    // 6. Cloud backups run on their own schedule once an account is connected.
+    cloudService().start();
+
+    // 7. Open main window, close splash
     createWindow(appPort);
     splash.destroy();
 
-    // 7. Look for updates in the background (never blocks startup, silent offline).
+    // 8. Look for updates in the background (never blocks startup, silent offline).
     setTimeout(() => checkForUpdates(false), 15_000);
 
   } catch (err) {
@@ -757,7 +760,7 @@ async function internalPost(route, body) {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || `Chuti refused the request (${res.status}).` };
+  return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || `Chuti refused the request (${res.status}).`, code: data.code };
 }
 
 ipcMain.handle('choose-backup-folder', async (event) => {
@@ -840,5 +843,66 @@ ipcMain.handle('open-backup-folder', (event) => {
   if (folder && fs.existsSync(folder)) { shell.openPath(folder); return true; }
   return false;
 });
+
+// ─── Cloud backup (Google Drive / OneDrive) ───────────────────────────────────
+// Sign-in happens in the system browser; tokens stay in this process and in a
+// DPAPI-protected file next to config.json. The page only ever receives the
+// provider name, the account email and results. See electron/cloud.
+const { createCloudService } = require('./electron/cloud/service');
+const { createTokenStore } = require('./electron/cloud/token-store');
+const { resolveClients, validateUserClient } = require('./electron/cloud/client-config');
+
+let cloud = null;
+function cloudService() {
+  if (!cloud) {
+    cloud = createCloudService({
+      internal: (action, body = {}) => internalPost('/api/internal/cloud-backup', { ...body, action }),
+      openExternal: (url) => shell.openExternal(url),
+      tokenStore: createTokenStore({
+        file: path.join(CONFIG_DIR, 'cloud.dat'),
+        crypto: {
+          available: () => safeStorage.isEncryptionAvailable(),
+          encrypt: (text) => safeStorage.encryptString(text),
+          decrypt: (buf) => safeStorage.decryptString(buf),
+        },
+      }),
+      clients: () => resolveClients({
+        bundledFile: path.join(__dirname, 'cloud-config.json'),
+        userClients: (loadConfig() || {}).cloudClients,
+      }),
+      log,
+    });
+  }
+  return cloud;
+}
+
+/** Runs a cloud operation for the app window and turns failures into { ok: false, error }. */
+async function cloudCall(event, fn) {
+  if (!fromAppWindow(event)) return { ok: false, error: 'Not allowed.' };
+  try {
+    const result = await fn(cloudService());
+    return result && typeof result === 'object' && 'ok' in result ? result : { ok: true, ...(result && typeof result === 'object' ? result : {}) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+ipcMain.handle('cloud-status', (event) => cloudCall(event, (svc) => ({ ok: true, ...svc.status() })));
+ipcMain.handle('cloud-connect', (event, provider) => cloudCall(event, (svc) => svc.connect(String(provider || ''))));
+ipcMain.handle('cloud-disconnect', (event) => cloudCall(event, (svc) => svc.disconnect()));
+ipcMain.handle('cloud-backup-now', (event) => cloudCall(event, (svc) => svc.backupNow('manual')));
+ipcMain.handle('cloud-list', (event) => cloudCall(event, async (svc) => ({ ok: true, backups: await svc.list() })));
+ipcMain.handle('cloud-restore', (event, id, name, secret, staged) =>
+  cloudCall(event, (svc) => svc.restore(String(id || ''), String(name || ''), secret ? String(secret).slice(0, 200) : undefined, staged === true)));
+ipcMain.handle('cloud-set-client', (event, provider, input) => cloudCall(event, () => {
+  const id = String(provider || '');
+  const cfg = loadConfig() || {};
+  const clients = { ...(cfg.cloudClients || {}) };
+  if (input === null) delete clients[id];
+  else clients[id] = validateUserClient(id, input);
+  saveConfig({ ...cfg, cloudClients: clients });
+  log(`Cloud app registration ${input === null ? 'removed' : 'saved'} for ${id}`);
+  return { ok: true };
+}));
 
 } // end of `else` block guarded by gotSingleInstanceLock — see top of file

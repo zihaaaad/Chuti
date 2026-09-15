@@ -9,8 +9,9 @@ const SECTIONS = [
   { id: 'employees', title: 'Employees & CSV import' },
   { id: 'leave', title: 'Recording leave' },
   { id: 'lates', title: 'Late arrivals & encashment' },
+  { id: 'calendar', title: 'Team calendar' },
   { id: 'reports', title: 'Reports & printing' },
-  { id: 'policy', title: 'Leave policy' },
+  { id: 'policy', title: 'Leave policy, types & holidays' },
   { id: 'year', title: 'Closing a leave year' },
   { id: 'data', title: 'Backups, security & LAN' },
 ];
@@ -69,24 +70,36 @@ export default async function GuidePage() {
 
           <section id="lates">
             <h2>Late arrivals &amp; encashment</h2>
-            <p>On <strong>Overview</strong>, enter the <em>total</em> number of late arrivals for an employee in a month. Saving again replaces the total; it does not add to it. Every N late arrivals (set in Settings) cut one day of CL. The cut never takes CL below zero.</p>
+            <p>On <strong>Overview</strong>, choose the employee and the <em>date</em> they arrived late (minutes and a note are optional), then record it. The card lists that month&apos;s entries so a mistake can be removed. Every N late arrivals in a month (set in Settings) cut one day of CL, recalculated whenever an entry is added or removed. The cut never takes CL below zero.</p>
+            <p>Months recorded before dated entries existed show on the employee&apos;s page as a monthly total, which you can clear there.</p>
             <p>To pay out unused Earned Leave, choose <strong>Encash EL</strong> on Leave records. The days leave the EL balance and appear in the ledger.</p>
+          </section>
+
+          <section id="calendar">
+            <h2>Team calendar</h2>
+            <p><strong>Team calendar</strong> shows the month as a grid: one row per employee, one column per day. Coloured cells are leave in that type&apos;s colour, shaded columns are weekends and holidays, and striped cells are days off inside a leave that were not charged. The bottom row counts how many people are away each day, with the busiest day highlighted.</p>
+            <p>Filter by department, tick <strong>Show everyone</strong> to include staff with no leave, and use <strong>Print</strong> for a copy for the notice board.</p>
           </section>
 
           <section id="reports">
             <h2>Reports &amp; printing</h2>
             <ul>
               <li><strong>Leave ledger</strong>: every leave in the chosen month. Leave that crosses into another month shows only the days inside the chosen month.</li>
-              <li><strong>Payroll summary</strong>: per employee, days of each leave type in the month, late arrivals, CL cut, and paid days (calendar days minus LWP).</li>
+              <li><strong>Payroll summary</strong>: per employee, days of each leave type in the month, late arrivals, CL cut, and paid days (calendar days minus unpaid leave).</li>
               <li><strong>Employee statement</strong>: open an employee to see their balances and full ledger, and print it.</li>
             </ul>
-            <p>Print uses A4 landscape with signature lines. Choose <strong>Save as PDF</strong> as the printer to keep a PDF. <strong>Export CSV</strong> opens directly in Excel.</p>
+            <p>Print uses A4 landscape with signature lines. Choose <strong>Save as PDF</strong> as the printer to keep a PDF. <strong>Export Excel</strong> downloads an .xlsx workbook with both the payroll summary and the leave ledger for the chosen month and filters; <strong>CSV</strong> exports the current tab.</p>
           </section>
 
           <section id="policy">
             <h2>Leave policy</h2>
             <h3>Weekly days off and holidays</h3>
             <p>Days off and holidays are never charged on their own. Changing them affects leave recorded afterwards; existing records keep their day counts.</p>
+            <h3>Leave types</h3>
+            <p>In <strong>Settings → Leave types</strong>, add types such as Study Leave: give each a name, a short name, whether it has a yearly quota (and how many days), whether it is paid, and a colour. Every employee gets a balance straight away; set individual quotas on the Employees page.</p>
+            <p>A type that has leave recorded can&apos;t be deleted, and its quota and pay rules are fixed. Untick <strong>In use</strong> to hide it from new leave while keeping its history. Casual Leave, Earned Leave and Leave Without Pay are required.</p>
+            <h3>Importing holidays</h3>
+            <p>In <strong>Settings → Holidays</strong>, choose <strong>Import from file</strong>, download the template, fill in the official list (<code>Title, StartDate, EndDate</code>; dates like 2026-03-26 or 26/03/2026), and preview. Holidays already listed and rows with problems are skipped.</p>
             <h3>Sandwich rule</h3>
             <p>When on, days off that fall <em>between</em> two leave days are charged too. With a Friday–Saturday weekend, leave from Thursday to Sunday charges 4 days. Leave that only starts or ends next to a weekend does not charge the weekend.</p>
           </section>
@@ -97,7 +110,7 @@ export default async function GuidePage() {
             <ol>
               <li>save a backup,</li>
               <li>carry each employee&apos;s unused EL into the new year, up to the cap,</li>
-              <li>let unused CL, SL and ML lapse,</li>
+              <li>let every other unused quota lapse,</li>
               <li>make records from the closed year read-only (they stay visible in reports).</li>
             </ol>
             <p>Leave already recorded on or after the new start date counts toward the new year.</p>
@@ -117,6 +130,12 @@ export default async function GuidePage() {
               Encrypted copies are useless to anyone who gets into your cloud account or finds the USB drive. Restoring asks for the password or the recovery code.
             </p>
             <Alert tone="warning">Lose both the password and the recovery code and the encrypted copies can never be opened. Also keep Chuti&apos;s own data folder out of OneDrive, Google Drive and Dropbox; Settings warns you if it isn&apos;t.</Alert>
+            <h3>Cloud backup: Google Drive or OneDrive</h3>
+            <p>
+              In <strong>Settings → Cloud backup</strong>, on the host computer, choose <strong>Connect Google Drive</strong> or <strong>Connect OneDrive</strong> and sign in in your browser. Chuti then uploads an encrypted backup (database and attachments) every day at the time you set and keeps the newest ones.
+              Cloud backups always need a backup password. Chuti can only see its own folder: “Chuti Backups” in Google Drive, or Apps/Chuti in OneDrive.
+            </p>
+            <p>To restore, choose <strong>Show backups</strong>, then <strong>Restore</strong>. On a new computer, install Chuti, connect the same account, and restore the newest backup with the backup password or recovery code.</p>
             <h3>Quick restore points</h3>
             <p>Chuti also saves database-only snapshots in its own data folder on start-up and every 12 hours (latest 30). They are handy for undoing a mistake, but they sit on the same drive as your data. A copy of the current data is saved before every restore.</p>
             <p><strong>Balance check</strong> recalculates balances from the leave records and fixes any mismatch.</p>

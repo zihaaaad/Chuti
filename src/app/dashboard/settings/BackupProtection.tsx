@@ -31,11 +31,14 @@ export default function BackupProtection({
   folderSync,
   isDesktop,
   onChanged,
+  allowUnencrypted = true,
 }: {
   encryption: EncryptionView;
   folderSync: string | null;
   isDesktop: boolean;
   onChanged: () => void;
+  /** False where encryption is mandatory (cloud backup): hides the no-password options. */
+  allowUnencrypted?: boolean;
 }) {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
@@ -106,7 +109,7 @@ export default function BackupProtection({
               <Lock size={16} aria-hidden /> Set a backup password
             </button>
           )}
-          {encryption.mode === 'unset' && (
+          {encryption.mode === 'unset' && allowUnencrypted && (
             <button type="button" className="btn btn-ghost" onClick={saveWithoutPassword}>Save without a password</button>
           )}
           {encryption.mode === 'on' && !encryption.unlocked && (
@@ -119,7 +122,7 @@ export default function BackupProtection({
               <button type="button" className="btn btn-secondary" onClick={() => setDialog('change')}>
                 <KeyRound size={16} aria-hidden /> Change password
               </button>
-              <button type="button" className="btn btn-ghost" onClick={saveWithoutPassword}>Turn off protection</button>
+              {allowUnencrypted && <button type="button" className="btn btn-ghost" onClick={saveWithoutPassword}>Turn off protection</button>}
             </>
           )}
         </div>

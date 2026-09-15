@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { isValidDateString, isValidMonthString, WEEKDAYS } from './domain/dates';
-import { ENCASHMENT_TYPE, isLeaveType } from './domain/leave-types';
+import { isValidDateString, WEEKDAYS } from './domain/dates';
+import { TONES } from './domain/leave-types';
 import { MIN_PASSWORD_LENGTH_CLIENT } from './constants';
 
 // Form schemas shared by Server Actions. Messages are written for the admin
@@ -61,17 +61,29 @@ export const employeeSchema = z.object({
     .transform((v) => (v ? v : null))
     .refine((v) => v === null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Enter a valid email address, or leave it blank.'),
   status: z.enum(['Active', 'Resigned', 'Terminated']).optional().default('Active'),
-  cl_allocated: allocation(10),
-  sl_allocated: allocation(14),
-  el_allocated: allocation(15),
-  ml_allocated: allocation(0),
+  // Quotas are read per leave type (alloc_<code>) in the employees action.
+});
+
+export const leaveTypeSchema = z.object({
+  label: text('Name', 60),
+  short: z
+    .string({ error: 'Short name is required.' })
+    .trim()
+    .min(1, 'Short name is required.')
+    .max(6, 'Short name must be 6 characters or fewer.'),
+  default_allocation: allocation(0),
+  has_quota: bool,
+  is_paid: bool,
+  tone: z.enum(TONES, { error: 'Choose a colour.' }),
+  active: bool,
 });
 
 export const leaveSchema = z
   .object({
     id: z.coerce.number().int().positive().optional(),
     employee_id: id('an employee'),
-    leave_type: z.string().refine(isLeaveType, 'Choose a leave type.'),
+    // Checked against the configured leave types in the action.
+    leave_type: z.string({ error: 'Choose a leave type.' }).trim().min(1, 'Choose a leave type.').max(60),
     start_date: isoDate('Start date'),
     end_date: z.string().optional(),
     is_half_day: bool,
@@ -90,7 +102,7 @@ export const leaveSchema = z
 
 export const leavePreviewSchema = z.object({
   employee_id: z.coerce.number().int().positive().optional(),
-  leave_type: z.string().refine((v) => isLeaveType(v) || v === ENCASHMENT_TYPE),
+  leave_type: z.string().trim().min(1).max(60),
   start_date: isoDate('Start date'),
   end_date: isoDate('End date'),
   is_half_day: z.boolean(),
@@ -107,10 +119,22 @@ export const encashmentSchema = z.object({
   remarks: optionalText('Remarks', 2000),
 });
 
-export const lateSchema = z.object({
+export const lateArrivalSchema = z.object({
   employee_id: id('an employee'),
-  month_year: z.string().refine(isValidMonthString, 'Choose a month.'),
-  late_count: z.coerce.number({ error: 'Enter the number of late arrivals.' }).int('Use a whole number.').min(0, 'Late arrivals cannot be negative.').max(31, 'A month has at most 31 working days.'),
+  date: isoDate('Date'),
+  minutes_late: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v, ctx) => {
+      if (v === undefined || v === '') return null;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 600) {
+        ctx.addIssue({ code: 'custom', message: 'Minutes late must be a whole number between 1 and 600.' });
+        return z.NEVER;
+      }
+      return n;
+    }),
+  note: optionalText('Note', 200),
 });
 
 export const settingsSchema = z.object({

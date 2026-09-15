@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'electron/**/*.test.ts'],
     environment: 'node',
     // db.test.ts uses a module-level connection; keep files isolated.
     pool: 'forks',

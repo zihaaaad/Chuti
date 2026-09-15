@@ -1,0 +1,9 @@
+{
+  "google": {
+    "clientId": "123456789012-xxxxxxxxxxxxxxxx.apps.googleusercontent.com",
+    "clientSecret": "GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "onedrive": {
+    "clientId": "00000000-0000-0000-0000-000000000000"
+  }
+}

@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import type { Database } from 'sqlite';
-import { adminAction, parseInput, type ActionResult } from '@/lib/action';
+import { ValidationError, adminAction, parseInput, type ActionResult } from '@/lib/action';
 import { ActionError, withTransaction } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { deleteAttachment } from '@/lib/attachments';
-import { defaultAllocations, upsertAllocations } from '@/lib/ledger';
+import { applyAllocations, readLeaveTypes } from '@/lib/leave-type-store';
 import { employeeSchema } from '@/lib/validation';
 import { parseCsv } from '@/lib/domain/csv';
 import { isValidDateString, todayLocal } from '@/lib/domain/dates';
@@ -20,6 +20,28 @@ async function findOrCreateDepartment(db: Database, rawName: string): Promise<nu
 
 function revalidateEmployees() {
   revalidatePath('/dashboard', 'layout');
+}
+
+/**
+ * Reads `alloc_<leave type code>` fields for every leave type with a quota.
+ * A missing field means "leave as is" (or the type's default for new balances).
+ */
+async function parseAllocations(db: Database, formData: FormData): Promise<Record<string, number | undefined>> {
+  const types = await readLeaveTypes(db);
+  const result: Record<string, number | undefined> = {};
+  const errors: Record<string, string> = {};
+  for (const t of types.filter((x) => x.hasQuota)) {
+    const raw = formData.get(`alloc_${t.code}`);
+    if (raw === null || raw === '') continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > 365) {
+      errors[`alloc_${t.code}`] = 'Quotas must be between 0 and 365 days.';
+      continue;
+    }
+    result[t.code] = Math.round(n * 2) / 2;
+  }
+  if (Object.keys(errors).length) throw new ValidationError('Quotas must be between 0 and 365 days.', errors);
+  return result;
 }
 
 export async function addEmployee(formData: FormData): Promise<ActionResult<{ id: number }>> {
@@ -39,9 +61,7 @@ export async function addEmployee(formData: FormData): Promise<ActionResult<{ id
         input.employee_id, input.name, input.designation, deptId, input.joining_date, input.phone, input.email,
       );
       const newId = res.lastID!;
-      await upsertAllocations(db, newId, {
-        Casual: input.cl_allocated, Sick: input.sl_allocated, Earned: input.el_allocated, Maternity: input.ml_allocated,
-      });
+      await applyAllocations(db, newId, await parseAllocations(db, formData));
       await logAudit(db, 'created', 'employee', newId, `Added ${input.name} (${input.employee_id})`);
       return newId;
     });
@@ -70,9 +90,7 @@ export async function updateEmployee(formData: FormData): Promise<ActionResult> 
          WHERE id = ?`,
         input.employee_id, input.name, input.designation, deptId, input.joining_date, input.phone, input.status, input.email, id,
       );
-      await upsertAllocations(db, id, {
-        Casual: input.cl_allocated, Sick: input.sl_allocated, Earned: input.el_allocated, Maternity: input.ml_allocated,
-      });
+      await applyAllocations(db, id, await parseAllocations(db, formData));
       const statusNote = before.status !== input.status ? `; status ${before.status} → ${input.status}` : '';
       await logAudit(db, 'updated', 'employee', id, `Updated ${input.name} (${input.employee_id})${statusNote}`);
     });
@@ -117,7 +135,6 @@ export async function importEmployeesFromCSV(formData: FormData): Promise<Action
     if (rows.length < 2) throw new ActionError('The CSV file has no employee rows under the header.');
     if (rows.length - 1 > MAX_IMPORT_ROWS) throw new ActionError(`Import at most ${MAX_IMPORT_ROWS} employees at a time.`);
 
-    const defaults = defaultAllocations();
     // One transaction: an import either lands completely or not at all.
     const summary = await withTransaction(async (db) => {
       const result: ImportSummary = { imported: 0, skipped: [] };
@@ -151,7 +168,7 @@ export async function importEmployeesFromCSV(formData: FormData): Promise<Action
            VALUES (?, ?, ?, ?, ?, ?, ?, 'Active')`,
           employee_id, name, designation, deptId, joinDate, phone, email,
         );
-        await upsertAllocations(db, res.lastID!, defaults);
+        await applyAllocations(db, res.lastID!, {});
         result.imported++;
       }
       await logAudit(db, 'imported', 'import', null, `Imported ${result.imported} employees from ${file.name} (${result.skipped.length} rows skipped)`);

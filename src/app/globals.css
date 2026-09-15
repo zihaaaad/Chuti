@@ -34,12 +34,14 @@
   --info-bg: #e8f1f9;
 
   /* Leave-type categorical palette (distinct from status colors) */
-  --lt-casual: #246643;   --lt-casual-bg: #e5f1ea;
-  --lt-sick: #7a3e9d;     --lt-sick-bg: #f3eaf8;
-  --lt-earned: #1d5a85;   --lt-earned-bg: #e8f1f9;
-  --lt-maternity: #9d3e6b; --lt-maternity-bg: #f9eaf1;
-  --lt-lwp: #a12a2a;      --lt-lwp-bg: #fbecec;
-  --lt-encashed: #6b5a12; --lt-encashed-bg: #f6f0d8;
+  --tone-green: #246643;  --tone-green-bg: #e5f1ea;
+  --tone-purple: #7a3e9d; --tone-purple-bg: #f3eaf8;
+  --tone-blue: #1d5a85;   --tone-blue-bg: #e8f1f9;
+  --tone-pink: #9d3e6b;   --tone-pink-bg: #f9eaf1;
+  --tone-red: #a12a2a;    --tone-red-bg: #fbecec;
+  --tone-amber: #6b5a12;  --tone-amber-bg: #f6f0d8;
+  --tone-teal: #0f6e6e;   --tone-teal-bg: #e1f3f2;
+  --tone-slate: #4a5a66;  --tone-slate-bg: #eceff2;
 
   --sidebar-width: 244px;
   --radius-sm: 4px;
@@ -80,12 +82,14 @@
     --info: #8cc2ea;
     --info-bg: #13263a;
 
-    --lt-casual: #7fd6a2;   --lt-casual-bg: #14301f;
-    --lt-sick: #cfa3ea;     --lt-sick-bg: #2a1c34;
-    --lt-earned: #8cc2ea;   --lt-earned-bg: #13263a;
-    --lt-maternity: #eaa3c4; --lt-maternity-bg: #341c28;
-    --lt-lwp: #f19191;      --lt-lwp-bg: #331818;
-    --lt-encashed: #e0cd7c; --lt-encashed-bg: #2c2712;
+    --tone-green: #7fd6a2;  --tone-green-bg: #14301f;
+    --tone-purple: #cfa3ea; --tone-purple-bg: #2a1c34;
+    --tone-blue: #8cc2ea;   --tone-blue-bg: #13263a;
+    --tone-pink: #eaa3c4;   --tone-pink-bg: #341c28;
+    --tone-red: #f19191;    --tone-red-bg: #331818;
+    --tone-amber: #e0cd7c;  --tone-amber-bg: #2c2712;
+    --tone-teal: #7fd3d0;   --tone-teal-bg: #12302f;
+    --tone-slate: #b3c0ca;  --tone-slate-bg: #222b31;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 16px 40px -8px rgba(0, 0, 0, 0.7);
@@ -324,12 +328,15 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; backgr
 .badge-danger { background: var(--danger-bg); color: var(--danger); }
 .badge-warning { background: var(--warning-bg); color: var(--warning); }
 .badge-info { background: var(--info-bg); color: var(--info); }
-.lt-casual { background: var(--lt-casual-bg); color: var(--lt-casual); }
-.lt-sick { background: var(--lt-sick-bg); color: var(--lt-sick); }
-.lt-earned { background: var(--lt-earned-bg); color: var(--lt-earned); }
-.lt-maternity { background: var(--lt-maternity-bg); color: var(--lt-maternity); }
-.lt-lwp { background: var(--lt-lwp-bg); color: var(--lt-lwp); }
-.lt-encashed { background: var(--lt-encashed-bg); color: var(--lt-encashed); }
+/* Leave type colours (chosen per type in Settings → Leave types) */
+.tone-green { background: var(--tone-green-bg); color: var(--tone-green); }
+.tone-purple { background: var(--tone-purple-bg); color: var(--tone-purple); }
+.tone-blue { background: var(--tone-blue-bg); color: var(--tone-blue); }
+.tone-pink { background: var(--tone-pink-bg); color: var(--tone-pink); }
+.tone-red { background: var(--tone-red-bg); color: var(--tone-red); }
+.tone-amber { background: var(--tone-amber-bg); color: var(--tone-amber); }
+.tone-teal { background: var(--tone-teal-bg); color: var(--tone-teal); }
+.tone-slate { background: var(--tone-slate-bg); color: var(--tone-slate); }
 
 /* ─── Tables ───────────────────────────────────────────────────────────── */
 .table-wrap { width: 100%; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
@@ -444,3 +451,37 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; backgr
 @keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(0.99); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.9s linear infinite; }
+
+/* ─── Team calendar ────────────────────────────────────────────────────── */
+.cal-wrap { max-height: calc(100vh - 260px); overflow: auto; }
+.cal { border-collapse: separate; border-spacing: 0; font-size: 0.8rem; min-width: 100%; }
+.cal th, .cal td { border-bottom: 1px solid var(--border); border-right: 1px solid color-mix(in srgb, var(--border) 55%, transparent); padding: 0; height: 2.4rem; text-align: center; }
+.cal thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-muted); color: var(--fg-muted); font-weight: 600; }
+.cal tfoot th, .cal tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--surface-muted); font-weight: 700; border-top: 1px solid var(--border); }
+.cal .cal-name { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; padding: 0.3rem 0.75rem; min-width: 11rem; max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; border-right: 1px solid var(--border); }
+.cal thead .cal-name, .cal tfoot .cal-name { z-index: 3; background: var(--surface-muted); }
+.cal .cal-name .sub { display: block; font-size: 0.72rem; font-weight: 400; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; }
+.cal-day { min-width: 2rem; line-height: 1.1; }
+.cal-day span { display: block; }
+.cal-wd { font-size: 0.65rem; font-weight: 500; }
+.cal-today { box-shadow: inset 0 -3px 0 var(--accent); color: var(--fg) !important; }
+.cal .cal-off-weekend { background: color-mix(in srgb, var(--surface-muted) 70%, transparent); }
+.cal .cal-off-holiday { background: var(--warning-bg); }
+.cal thead .cal-off-holiday { color: var(--warning); }
+.cal-leave { display: flex; align-items: center; justify-content: center; height: calc(100% - 6px); margin: 3px 0; font-size: 0.68rem; font-weight: 700; white-space: nowrap; overflow: visible; }
+.cal-half { background-image: linear-gradient(135deg, transparent 50%, var(--surface) 50%); }
+.cal-uncharged { opacity: 0.55; background-image: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--surface) 70%, transparent) 4px 8px); }
+.cal-total { min-width: 3rem; padding: 0 0.5rem !important; font-variant-numeric: tabular-nums; font-weight: 600; }
+.cal-count { font-variant-numeric: tabular-nums; }
+.cal-peak { color: var(--danger); }
+.cal tbody tr:hover .cal-name { background: var(--surface-muted); }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center; margin-top: 0.75rem; }
+.cal-legend-off { background: var(--surface-muted); }
+.cal-legend-holiday { background: var(--warning-bg); color: var(--warning); }
+@media print {
+  .cal-wrap { max-height: none; overflow: visible; }
+  .cal { font-size: 0.6rem; }
+  .cal .cal-name { min-width: 7rem; position: static; }
+  .cal thead th, .cal tfoot th, .cal tfoot td { position: static; }
+  .cal-leave, .cal .cal-off-holiday, .cal .cal-off-weekend { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

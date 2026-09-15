@@ -2,7 +2,7 @@ import 'server-only';
 import type { Database } from 'sqlite';
 import { cookies } from 'next/headers';
 
-export type AuditEntity = 'employee' | 'leave' | 'encashment' | 'late' | 'settings' | 'holiday' | 'department' | 'backup' | 'leave_year' | 'auth' | 'import';
+export type AuditEntity = 'employee' | 'leave' | 'encashment' | 'late' | 'settings' | 'holiday' | 'department' | 'backup' | 'leave_year' | 'leave_type' | 'auth' | 'import';
 
 /**
  * Appends an audit entry. Call inside the same transaction as the change so

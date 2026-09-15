@@ -9,8 +9,10 @@ import { useToast } from '@/context/ToastContext';
 import { useConfirm } from '@/context/ConfirmContext';
 import Modal from '@/components/Modal';
 import EmployeePicker, { type PickerEmployee } from '@/components/EmployeePicker';
-import { Alert, DialogHeader, EmptyState, Field, LeaveTypeBadge, fieldAria, formatDays } from '@/components/ui';
-import { ENCASHMENT_TYPE, LEAVE_TYPES } from '@/lib/domain/leave-types';
+import { Alert, DialogHeader, EmptyState, Field, fieldAria, formatDays } from '@/components/ui';
+import LeaveTypeBadge from '@/components/LeaveTypeBadge';
+import { CASUAL, EARNED, ENCASHMENT_TYPE } from '@/lib/domain/leave-types';
+import { useActiveLeaveTypes, useLeaveTypes } from '@/context/LeaveTypesContext';
 import { formatDisplayDate, formatDisplayRange, todayLocal } from '@/lib/domain/dates';
 import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_MB, isPreviewablePath } from '@/lib/constants';
 
@@ -51,13 +53,15 @@ interface LeaveForm {
   remarks: string;
 }
 
-const emptyForm = (): LeaveForm => ({ employee_id: '', leave_type: 'Casual', start_date: todayLocal(), end_date: todayLocal(), is_half_day: false, reason: '', remarks: '' });
+const emptyForm = (): LeaveForm => ({ employee_id: '', leave_type: CASUAL, start_date: todayLocal(), end_date: todayLocal(), is_half_day: false, reason: '', remarks: '' });
 
 export default function LeaveClient({ records, employees, total, page, pageSize, query, type, leaveYearStart, openNew }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+  const allTypes = useLeaveTypes();
+  const activeTypes = useActiveLeaveTypes();
   const leaveTitle = useId();
   const encashTitle = useId();
   const previewTitle = useId();
@@ -226,7 +230,7 @@ export default function LeaveClient({ records, employees, total, page, pageSize,
           </div>
           <select className="select" style={{ width: 'auto' }} value={type} onChange={(e) => navigate({ type: e.target.value, page: '1' })} aria-label="Filter by leave type">
             <option value="">All types</option>
-            {LEAVE_TYPES.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+            {allTypes.map((t) => <option key={t.code} value={t.code}>{t.label}{t.active ? '' : ' (switched off)'}</option>)}
             <option value={ENCASHMENT_TYPE}>EL encashments</option>
           </select>
         </div>
@@ -343,7 +347,11 @@ export default function LeaveClient({ records, employees, total, page, pageSize,
             <div className="form-grid cols-2">
               <Field label="Leave type" htmlFor="leave-type" required error={errors.leave_type}>
                 <select className="select" value={form.leave_type} onChange={(e) => update('leave_type', e.target.value)} disabled={isPending} {...fieldAria('leave-type', errors.leave_type)}>
-                  {LEAVE_TYPES.map((t) => <option key={t.code} value={t.code}>{t.label} ({t.short})</option>)}
+                  {activeTypes.map((t) => <option key={t.code} value={t.code}>{t.label} ({t.short})</option>)}
+                  {/* Editing an old record whose type has since been switched off keeps it selectable. */}
+                  {form.leave_type && !activeTypes.some((t) => t.code === form.leave_type) && (
+                    <option value={form.leave_type}>{allTypes.find((t) => t.code === form.leave_type)?.label ?? form.leave_type} (switched off)</option>
+                  )}
                 </select>
               </Field>
               <div className="field" style={{ justifyContent: 'flex-end' }}>
@@ -423,11 +431,11 @@ export default function LeaveClient({ records, employees, total, page, pageSize,
           <DialogHeader id={encashTitle} title="Encash Earned Leave" description="Pays out unused EL. The days are taken from the EL balance and logged today." onClose={() => setEncashOpen(false)} />
           <div className="form-grid">
             {encashError && <Alert tone="danger" live>{encashError}</Alert>}
-            <Field label="Employee" htmlFor="encash-emp" required hint={encashEmployee ? `${formatDays(encashEmployee.el_left)} of EL available` : undefined}>
+            <Field label="Employee" htmlFor="encash-emp" required hint={encashEmployee ? `${formatDays(encashEmployee.balances?.[EARNED] ?? 0)} of EL available` : undefined}>
               <EmployeePicker id="encash-emp" employees={employees} value={encash.employee_id} onChange={(v) => setEncash((s) => ({ ...s, employee_id: v }))} disabled={isPending} describedBy="encash-emp-hint" />
             </Field>
             <Field label="Days to encash" htmlFor="encash-days" required>
-              <input id="encash-days" className="input num" type="number" min={0.5} step={0.5} max={encashEmployee?.el_left ?? undefined} value={encash.encash_days} onChange={(e) => setEncash((s) => ({ ...s, encash_days: e.target.value }))} disabled={isPending} />
+              <input id="encash-days" className="input num" type="number" min={0.5} step={0.5} max={encashEmployee?.balances?.[EARNED] ?? undefined} value={encash.encash_days} onChange={(e) => setEncash((s) => ({ ...s, encash_days: e.target.value }))} disabled={isPending} />
             </Field>
             <Field label="Remarks" htmlFor="encash-remarks">
               <textarea id="encash-remarks" className="textarea" rows={2} placeholder="e.g. Paid with September 2026 salary" value={encash.remarks} onChange={(e) => setEncash((s) => ({ ...s, remarks: e.target.value }))} disabled={isPending} />

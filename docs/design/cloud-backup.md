@@ -1,6 +1,6 @@
 # Cloud backup — design plan
 
-Status: **Phase 0 shipped; cloud phases proposed** · Updated 2026-09-14 · Scope: desktop (Electron) build
+Status: **Phase 0 and Phase 1 (Google Drive + OneDrive) shipped; Dropbox not built** · Updated 2026-09-15 · Scope: desktop (Electron) build
 
 ## Decisions (2026-09-14)
 
@@ -21,6 +21,44 @@ Status: **Phase 0 shipped; cloud phases proposed** · Updated 2026-09-14 · Scop
 - The folder can only be chosen from the desktop window on the host computer: a native folder dialog in `main.js` sends it to `/api/internal/backup-folder` with a per-launch secret. A LAN browser signed in as admin can run, schedule, restore or stop copies, but cannot redirect them elsewhere. `CHUTI_BACKUP_DIR` sets the folder when running from source.
 - Restoring a copy rejects unexpected paths (zip-slip), checks every checksum and the SQLite integrity, refuses backups from newer schema versions, saves a pre-restore copy, keeps the backup-folder settings, and puts attachments back.
 - Health: the Overview page warns when the last copy failed or none succeeded in 48 hours, and the setup checklist asks for a folder until one is chosen. It also warns when the folder is on the same drive as the data.
+
+## Phase 1 — Cloud backup to Google Drive and OneDrive (implemented)
+
+What shipped, and where it differs from the proposal below:
+
+| Area | Implementation |
+|---|---|
+| Sign-in | `electron/cloud/oauth.js`: system browser, loopback listener on `127.0.0.1` (and `::1` on the same port), PKCE S256, `state` compared in constant time, 5-minute timeout. Stray callbacks with the wrong state are refused without ending the flow. |
+| Providers | `electron/cloud/providers.js`, plain `fetch` for both (no `googleapis` or MSAL). Google Drive: `drive.file`, files in a "Chuti Backups" folder, resumable upload in 8 MiB chunks that resume from the `Range` Google reports. OneDrive: `Files.ReadWrite.AppFolder` + `User.Read` + `offline_access`, Graph upload sessions in 10 MiB chunks (a multiple of 320 KiB); the pre-authorized upload URL never receives the bearer token. |
+| Tokens | `electron/cloud/token-store.js`: `{provider, account, refreshToken, folderId}` encrypted with `safeStorage` (DPAPI) in `%APPDATA%/Chuti/cloud.dat`. Nothing is stored when `safeStorage` is unavailable. Rotated refresh tokens (Microsoft) are saved. Access tokens stay in memory and are refreshed once on 401. |
+| Package | The same encrypted `.chuti` archive as backup copies, built by `createBackupArchive()` into `<data>/.cloud-staging` (local, never a synced folder). Cloud backups **require** backup encryption to be on and unlocked; there is no unencrypted option. |
+| Server coordination | `/api/internal/cloud-backup` (per-launch secret). `status`, `prepare` and `report` work without a session so the schedule runs while nobody is signed in; `connected`, `disconnected`, `staging` and `restore` also need the signed-in admin session from the app window. The database stores only provider, account email, schedule and last result (`cloud_*` settings, preserved across restores). |
+| Schedule and retention | The main process checks every 10 minutes whether the server says a run is due (daily hour, one-hour pause after a failure). After a successful upload it keeps the newest N Chuti backups (default 30) and never touches other files. Grandfather-father-son retention was not built. |
+| Restore | Main downloads into the staging folder (to `.partial`, then renamed), then the server runs `restoreArchiveFile()` — the same verified pipeline as backup copies (key or password/recovery code, checksums, integrity check, pre-restore copy, attachments). A wrong password keeps the download so the retry does not fetch it again. |
+| UI | Settings → Cloud backup. Connect, back up now, list and restore, and disconnect only work in the desktop window (preload bridge). LAN browsers see the status and can change the schedule. Overview warns when uploads fail or none succeeded in 48 hours. |
+| Audit | Connect, disconnect, each upload (with pruned count) and each restore are logged. |
+| Client registrations | `electron/cloud/client-config.js` resolves, per provider: environment (`CHUTI_GOOGLE_CLIENT_ID`/`_SECRET`, `CHUTI_ONEDRIVE_CLIENT_ID`) → bundled `cloud-config.json` (written in CI by `scripts/write-cloud-config.js` from repository secrets) → a registration the admin entered in Settings (stored in `config.json`). |
+| Tests | `electron/cloud/cloud.test.ts` (PKCE and loopback flow, forged state, denied consent, chunked uploads, retention filter, token store, client resolution, service prune/report/rotation/concurrency) and `src/lib/cloud-backup.test.ts` (encryption required, staging path validation, results, restore keeps the connection). |
+
+Not verified against the live Google and Microsoft APIs in development, because no client registration was available. Before a release, connect a test account for each provider and run a backup, a restore and a disconnect.
+
+### Registering the OAuth apps
+
+**Google Drive**
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Google Drive API**.
+2. Configure the OAuth consent screen: External, app name "Chuti", add the scope `https://www.googleapis.com/auth/drive.file`. **Publish the app to production**: in testing mode, refresh tokens expire after 7 days and backups stop.
+3. Credentials → Create credentials → OAuth client ID → **Desktop app**. Copy the client ID and client secret (for installed apps Google does not treat the secret as confidential).
+4. Add them as repository secrets `CHUTI_GOOGLE_CLIENT_ID` and `CHUTI_GOOGLE_CLIENT_SECRET`.
+
+**OneDrive**
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com/), App registrations → New registration, supported account types **Accounts in any organizational directory and personal Microsoft accounts**.
+2. Authentication → Add a platform → **Mobile and desktop applications**, redirect URI `http://localhost`. Enable **Allow public client flows**.
+3. API permissions → Microsoft Graph → Delegated: `Files.ReadWrite.AppFolder`, `User.Read`, `offline_access`.
+4. Add the Application (client) ID as the repository secret `CHUTI_ONEDRIVE_CLIENT_ID`. No secret is needed.
+
+Without these secrets the app still builds; the Settings card then offers "Use your own app registration".
 
 ## Goal
 
@@ -128,7 +166,7 @@ AES-256-GCM encrypted tar of:
 | Phase | Scope | Estimate |
 |---|---|---|
 | **0 — Copy to folder** ✅ | Done — see "Phase 0" above. The cloud phases reuse its archive format, snapshot, restore and health code. | done |
-| **1 — Foundation + Google Drive** | Provider interface, TokenStore, loopback/PKCE helper, packager with encryption and recovery code, scheduler, internal snapshot route, Settings card, restore flow, audit entries. Tests: crypto round-trip, manifest verification, provider against a mock HTTP server. | 1.5–2 weeks |
-| **2 — OneDrive + Dropbox** | Two more providers behind the same interface. | ~1 week |
+| **1 — Foundation + Google Drive** ✅ | Provider interface, TokenStore, loopback/PKCE helper, packager with encryption and recovery code, scheduler, internal snapshot route, Settings card, restore flow, audit entries. Tests: crypto round-trip, manifest verification, provider against a mock HTTP server. | 1.5–2 weeks |
+| **2 — OneDrive** ✅ + Dropbox | Two more providers behind the same interface. | ~1 week |
 | **3 — Polish** | Restore on a new computer from first-run, incremental attachments, retention pruning, quota errors, localisation. | 3–5 days |
 

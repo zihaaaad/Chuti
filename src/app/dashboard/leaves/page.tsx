@@ -3,7 +3,9 @@ import { requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getSettings } from '@/lib/settings';
 import { remainingSql } from '@/lib/domain/balance';
-import { isLeaveType, ENCASHMENT_TYPE } from '@/lib/domain/leave-types';
+import { ENCASHMENT_TYPE } from '@/lib/domain/leave-types';
+import { getLeaveTypes } from '@/lib/leave-type-store';
+import type { PickerEmployee } from '@/components/EmployeePicker';
 import { PageHeader } from '@/components/ui';
 import LeaveClient, { type LeaveRow } from './LeaveClient';
 
@@ -17,7 +19,8 @@ export default async function LeavesPage({ searchParams }: { searchParams: Searc
   await requireAdmin();
   const sp = await searchParams;
   const q = typeof sp.q === 'string' ? sp.q.trim().slice(0, 100) : '';
-  const type = typeof sp.type === 'string' && (isLeaveType(sp.type) || sp.type === ENCASHMENT_TYPE) ? sp.type : '';
+  const leaveTypes = await getLeaveTypes();
+  const type = typeof sp.type === 'string' && (leaveTypes.some((t) => t.code === sp.type) || sp.type === ENCASHMENT_TYPE) ? sp.type : '';
   const page = Math.max(1, parseInt(typeof sp.page === 'string' ? sp.page : '1', 10) || 1);
 
   const db = await getDb();
@@ -38,7 +41,7 @@ export default async function LeavesPage({ searchParams }: { searchParams: Searc
   }
   const filterSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const [countRow, records, employees] = await Promise.all([
+  const [countRow, records, employeeRows, balanceRows] = await Promise.all([
     db.get<{ count: number }>(`SELECT COUNT(*) AS count FROM leave_records r JOIN employees e ON r.employee_id = e.id ${filterSql}`, ...args),
     db.all<LeaveRow[]>(
       `SELECT r.id, r.employee_id, e.name, e.employee_id AS emp_code, r.leave_type, r.start_date, r.end_date, r.actual_days, r.reason, r.attachment_path, r.remarks, r.recorded_at
@@ -48,15 +51,24 @@ export default async function LeavesPage({ searchParams }: { searchParams: Searc
        LIMIT ? OFFSET ?`,
       ...args, PAGE_SIZE, (page - 1) * PAGE_SIZE,
     ),
-    db.all<{ id: number; name: string; employee_id: string; department: string | null; cl_left: number | null; sl_left: number | null; el_left: number | null }[]>(
-      `SELECT e.id, e.name, e.employee_id, d.name AS department,
-         MAX(CASE WHEN b.leave_type = 'Casual' THEN ${remainingSql('b')} END) AS cl_left,
-         MAX(CASE WHEN b.leave_type = 'Sick' THEN ${remainingSql('b')} END) AS sl_left,
-         MAX(CASE WHEN b.leave_type = 'Earned' THEN ${remainingSql('b')} END) AS el_left
-       FROM employees e LEFT JOIN departments d ON d.id = e.department_id LEFT JOIN leave_balances b ON e.id = b.employee_id
-       WHERE e.status = 'Active' GROUP BY e.id ORDER BY e.name COLLATE NOCASE`,
+    db.all<{ id: number; name: string; employee_id: string; department: string | null }[]>(
+      `SELECT e.id, e.name, e.employee_id, d.name AS department
+       FROM employees e LEFT JOIN departments d ON d.id = e.department_id
+       WHERE e.status = 'Active' ORDER BY e.name COLLATE NOCASE`,
+    ),
+    db.all<{ employee_id: number; leave_type: string; remaining: number }[]>(
+      `SELECT b.employee_id, b.leave_type, ${remainingSql('b')} AS remaining
+       FROM leave_balances b JOIN employees e ON e.id = b.employee_id WHERE e.status = 'Active'`,
     ),
   ]);
+
+  const balancesByEmployee = new Map<number, Record<string, number>>();
+  for (const b of balanceRows) {
+    const entry = balancesByEmployee.get(b.employee_id) ?? {};
+    entry[b.leave_type] = b.remaining;
+    balancesByEmployee.set(b.employee_id, entry);
+  }
+  const employees: PickerEmployee[] = employeeRows.map((e) => ({ ...e, balances: balancesByEmployee.get(e.id) ?? {} }));
 
   const total = countRow?.count ?? 0;
 

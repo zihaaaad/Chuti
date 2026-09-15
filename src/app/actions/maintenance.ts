@@ -3,7 +3,6 @@
 import fs from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
-import { verifyChutiDatabase } from '@/lib/sqlite-verify';
 import { adminAction, parseInput, type ActionResult } from '@/lib/action';
 import {
   ActionError,
@@ -11,27 +10,22 @@ import {
   backupKind,
   type BackupKind,
   checkpointedBackup,
-  copyWithSidecars,
   getDb,
   getPaths,
   listBackupFiles,
-  swapDatabaseFile,
   withTransaction,
 } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { uploadsDir } from '@/lib/attachments';
-import { ArchiveError, extractArchive, isArchiveName } from '@/lib/archive';
-import { BackupCryptoError, decryptFile, readEncryptedHeader, unlockKeyRing } from '@/lib/backup-crypto';
-import { ENCRYPTION_SETTING_KEYS, unlockedKey } from '@/lib/backup-keys';
+import { replaceDatabase, restoreArchiveFile } from '@/lib/restore';
+import { setCloudSchedule } from '@/lib/cloud-backup';
+import { isArchiveName } from '@/lib/archive';
 import {
-  BACKUP_COPY_SETTING_KEYS,
   readBackupCopyConfig,
   runBackupCopy,
   setBackupCopyFolder,
   setBackupCopySchedule,
 } from '@/lib/backup-copies';
 import { reconcileBalances, type BalanceDrift } from '@/lib/ledger';
-import { LATEST_SCHEMA_VERSION } from '@/lib/migrations';
 import { readSettings, setSetting } from '@/lib/settings';
 import { backupCopyScheduleSchema, closeYearSchema } from '@/lib/validation';
 import { carryForward, remainingDays } from '@/lib/domain/balance';
@@ -61,53 +55,6 @@ export async function createBackupNow(): Promise<ActionResult<{ name: string }>>
   });
 }
 
-
-/**
- * Replaces the live database with `sourceDb` (plus sidecars, if any):
- * verifies it first, saves a pre-restore copy, and keeps the backup-copy folder
- * settings so a restore never silently changes where future copies go.
- */
-async function replaceDatabase(sourceDb: string) {
-  const { DB_PATH, DATA_DIR } = getPaths();
-
-  // Verify a scratch copy (with its WAL) so a damaged file is rejected before anything is touched.
-  const scratch = path.join(DATA_DIR, `.verify_${Date.now()}.db`);
-  copyWithSidecars(sourceDb, scratch);
-  try {
-    const verified = await verifyChutiDatabase(scratch);
-    if (!verified.ok) throw new ActionError(verified.problem);
-    if (verified.schemaVersion > LATEST_SCHEMA_VERSION) {
-      throw new ActionError('That backup was made by a newer version of Chuti. Update Chuti, then restore it.');
-    }
-  } finally {
-    for (const s of ['', '-wal', '-shm']) fs.rmSync(scratch + s, { force: true });
-  }
-
-  const liveDb = await getDb();
-  // Where copies go and how they are protected belong to this computer, not to
-  // the backup: restoring a copy made before encryption was turned on must not
-  // silently switch protection off.
-  const preservedKeys = [...BACKUP_COPY_SETTING_KEYS, ...ENCRYPTION_SETTING_KEYS];
-  const keep = await liveDb.all<{ key: string; value: string }[]>(
-    `SELECT key, value FROM system_settings WHERE key IN (${preservedKeys.map(() => '?').join(',')})`,
-    ...preservedKeys,
-  );
-  // Current sign-ins survive the restore; sessions inside the backup do not.
-  const sessions = await liveDb.all<{ session_id: string; created_at: string }[]>('SELECT session_id, created_at FROM admin_sessions');
-
-  if (!(await checkpointedBackup('prerestore'))) {
-    throw new ActionError('A safety copy of the current data could not be saved, so nothing was restored.');
-  }
-  await swapDatabaseFile(() => copyWithSidecars(sourceDb, DB_PATH));
-
-  await withTransaction(async (db) => {
-    for (const { key, value } of keep) await setSetting(db, key, value);
-    await db.run('DELETE FROM admin_sessions');
-    for (const s of sessions) {
-      await db.run('INSERT OR IGNORE INTO admin_sessions (session_id, created_at) VALUES (?, ?)', s.session_id, s.created_at);
-    }
-  });
-}
 
 export async function restoreBackup(filename: string): Promise<ActionResult> {
   return adminAction('Could not restore the backup.', async () => {
@@ -166,68 +113,23 @@ export async function restoreBackupCopy(name: string, secret?: string): Promise<
     if (path.basename(name) !== name || !isArchiveName(name)) throw new ActionError('That is not a Chuti backup copy.');
     const archivePath = path.join(config.folder, name);
     if (!fs.existsSync(archivePath)) throw new ActionError('That backup copy no longer exists.');
-    if (secret !== undefined && (typeof secret !== 'string' || secret.length > 200)) throw new ActionError('Invalid password.');
+    const result = await restoreArchiveFile(archivePath, name, secret, 'backup copy');
+    revalidatePath('/', 'layout');
+    return result;
+  });
+}
 
-    const { DATA_DIR } = getPaths();
-    const workDir = path.join(DATA_DIR, `.restore-${Date.now()}`);
-    try {
-      let zipPath = archivePath;
-      if (name.endsWith('.chuti')) {
-        fs.mkdirSync(workDir, { recursive: true });
-        zipPath = path.join(workDir, 'archive.zip');
-        let header;
-        try {
-          header = await readEncryptedHeader(archivePath);
-        } catch (err) {
-          throw new ActionError(err instanceof BackupCryptoError ? err.message : 'This backup copy is damaged.');
-        }
-        // Use the key already unlocked on this computer when it matches; otherwise the copy's own key slots.
-        let key = unlockedKey(header.keyId);
-        if (!key) {
-          if (!secret) {
-            throw new ActionError('This copy is encrypted. Enter its backup password or recovery code.', 'SECRET_REQUIRED');
-          }
-          key = await unlockKeyRing({ keyId: header.keyId, slots: header.slots }, secret);
-          if (!key) {
-            await withTransaction((db) => logAudit(db, 'failed', 'backup', name, `Wrong backup password or recovery code for ${name}`));
-            throw new ActionError('That password or recovery code does not open this copy. Copies made before a password change need the old password.', 'SECRET_REQUIRED');
-          }
-        }
-        try {
-          await decryptFile(archivePath, zipPath, key);
-        } catch (err) {
-          throw new ActionError(err instanceof BackupCryptoError ? err.message : 'This backup copy could not be decrypted.');
-        }
-      }
+// ─── Cloud backup schedule (the connection itself is managed from the desktop app) ─
 
-      let manifest;
-      try {
-        manifest = await extractArchive(zipPath, workDir);
-      } catch (err) {
-        if (err instanceof ArchiveError) throw new ActionError(err.message);
-        throw err;
-      }
-      if (manifest.schemaVersion > LATEST_SCHEMA_VERSION) {
-        throw new ActionError('That backup was made by a newer version of Chuti. Update Chuti, then restore it.');
-      }
-
-      await replaceDatabase(path.join(workDir, 'database.db'));
-
-      // Put attachments back. Existing files with the same name are replaced; extra files are left alone.
-      const target = uploadsDir();
-      fs.mkdirSync(target, { recursive: true });
-      const restoredUploads = path.join(workDir, 'uploads');
-      const files = fs.existsSync(restoredUploads) ? fs.readdirSync(restoredUploads) : [];
-      for (const f of files) fs.copyFileSync(path.join(restoredUploads, f), path.join(target, f));
-
-      await withTransaction((db) =>
-        logAudit(db, 'restored', 'backup', name, `Restored from backup copy ${name} (made ${new Date(manifest.createdAt).toLocaleString('en-GB')}, ${files.length} attachments)`),
-      );
-      revalidatePath('/', 'layout');
-      return { attachments: files.length };
-    } finally {
-      fs.rmSync(workDir, { recursive: true, force: true });
-    }
+export async function updateCloudBackupSchedule(formData: FormData): Promise<ActionResult> {
+  return adminAction('Could not save the cloud backup schedule.', async () => {
+    const input = parseInput(backupCopyScheduleSchema, formData);
+    await withTransaction(async (db) => {
+      await setCloudSchedule(db, input);
+      await logAudit(db, 'updated', 'backup', null,
+        input.enabled ? `Daily cloud backup at ${String(input.hour).padStart(2, '0')}:00, keeping the latest ${input.keep}` : 'Paused daily cloud backups');
+    });
+    revalidatePath('/', 'layout');
   });
 }
 

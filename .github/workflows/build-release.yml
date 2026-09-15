@@ -171,6 +171,16 @@ jobs:
       - name: Generate icon.ico
         run: node scripts/generate-ico.js
 
+      - name: Write cloud backup client IDs
+        # Public OAuth client registrations for Google Drive / OneDrive backup.
+        # Optional: without these secrets the app still builds, and admins can
+        # enter their own registration in Settings → Cloud backup.
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.CHUTI_GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.CHUTI_GOOGLE_CLIENT_SECRET }}
+          ONEDRIVE_CLIENT_ID: ${{ secrets.CHUTI_ONEDRIVE_CLIENT_ID }}
+        run: node scripts/write-cloud-config.js
+
       # ── 8. Build Windows installer + portable EXE ─────────────────────────
       - name: Build Electron Windows EXE
         env:

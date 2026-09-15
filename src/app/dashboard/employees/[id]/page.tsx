@@ -6,10 +6,13 @@ import { requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { getSettings } from '@/lib/settings';
 import { remainingDays } from '@/lib/domain/balance';
-import { ENCASHMENT_TYPE, LEAVE_TYPES, leaveTypeInfo } from '@/lib/domain/leave-types';
+import { ENCASHMENT_TYPE } from '@/lib/domain/leave-types';
+import { getLeaveTypes } from '@/lib/leave-type-store';
 import { formatDisplayDate, formatDisplayRange } from '@/lib/domain/dates';
-import { EmptyState, LeaveTypeBadge, PageHeader, StatusBadge, formatDays } from '@/components/ui';
+import { EmptyState, PageHeader, StatusBadge, formatDays } from '@/components/ui';
+import LeaveTypeBadge from '@/components/LeaveTypeBadge';
 import PrintButton from '@/components/PrintButton';
+import { ClearUndatedButton, LateArrivalRemoveButton } from './LateArrivalControls';
 
 export const metadata: Metadata = { title: 'Employee ledger' };
 
@@ -32,7 +35,7 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
   if (!Number.isInteger(id) || id <= 0) notFound();
 
   const db = await getDb();
-  const settings = await getSettings();
+  const [settings, leaveTypes] = await Promise.all([getSettings(), getLeaveTypes()]);
   const employee = await db.get<{ id: number; employee_id: string; name: string; designation: string; department: string | null; join_date: string; phone: string | null; email: string | null; status: string }>(
     `SELECT e.id, e.employee_id, e.name, e.designation, d.name AS department, e.join_date, e.phone, e.email, e.status
      FROM employees e LEFT JOIN departments d ON d.id = e.department_id WHERE e.id = ?`,
@@ -49,11 +52,15 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
       'SELECT id, leave_type, start_date, end_date, actual_days, reason, remarks FROM leave_records WHERE employee_id = ? ORDER BY start_date DESC',
       id,
     ),
-    db.all<{ id: number; month_year: string; late_count: number; deducted_cl: number }[]>(
-      'SELECT id, month_year, late_count, deducted_cl FROM late_deductions WHERE employee_id = ? ORDER BY month_year DESC',
+    db.all<{ id: number; month_year: string; late_count: number; deducted_cl: number; undated_count: number | null }[]>(
+      'SELECT id, month_year, late_count, deducted_cl, undated_count FROM late_deductions WHERE employee_id = ? ORDER BY month_year DESC',
       id,
     ),
   ]);
+  const lateEntries = await db.all<{ id: number; date: string; minutes_late: number | null; note: string | null }[]>(
+    'SELECT id, date, minutes_late, note FROM late_arrivals WHERE employee_id = ? ORDER BY date DESC LIMIT 200',
+    id,
+  );
 
   const ledger: LedgerEntry[] = [
     ...records.map((r) => ({
@@ -71,7 +78,7 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
       kind: 'late',
       period: new Date(`${l.month_year}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
       days: l.deducted_cl,
-      note: `${l.late_count} late arrivals`,
+      note: `${l.late_count} late arrival${l.late_count === 1 ? '' : 's'}${l.undated_count ? ` (${l.undated_count} recorded as a monthly total)` : ''}`,
       locked: `${l.month_year}-01` < settings.leaveYearStart,
     })),
   ].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -104,9 +111,10 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
             </div>
           </div>
           <div className="balance-cards">
-            {LEAVE_TYPES.filter((t) => t.code !== 'LWP').map((t) => {
+            {leaveTypes.filter((t) => t.hasQuota).map((t) => {
               const b = balances.find((x) => x.leave_type === t.code);
-              if (!b) return null;
+              // Hide switched-off types unless this employee has used them.
+              if (!b || (!t.active && b.used_days === 0 && b.encashed_days === 0)) return null;
               const total = b.allocated_days + b.carried_forward;
               const left = remainingDays(b);
               const pct = total > 0 ? Math.max(0, Math.min(100, (left / total) * 100)) : 0;
@@ -126,16 +134,20 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
                 </div>
               );
             })}
-            {(() => {
-              const lwp = balances.find((x) => x.leave_type === 'LWP');
-              return lwp ? (
-                <div className="balance-card">
-                  <LeaveTypeBadge type="LWP" short />
-                  <div className="big">{lwp.used_days}</div>
-                  <div className="subtle">unpaid days taken</div>
+            {leaveTypes.filter((t) => !t.hasQuota).map((t) => {
+              const b = balances.find((x) => x.leave_type === t.code);
+              if (!b || (!t.active && b.used_days === 0)) return null;
+              return (
+                <div key={t.code} className="balance-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <LeaveTypeBadge type={t.code} short />
+                    <span className="subtle">{t.label}</span>
+                  </div>
+                  <div className="big">{b.used_days}</div>
+                  <div className="subtle">{t.isPaid ? 'days taken (no quota)' : 'unpaid days taken'}</div>
                 </div>
-              ) : null;
-            })()}
+              );
+            })}
           </div>
         </section>
 
@@ -172,7 +184,7 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
                     </td>
                     <td className="nowrap">{e.period}</td>
                     <td className="num">{e.days ?? '—'}</td>
-                    <td>{e.note}{e.kind === ENCASHMENT_TYPE && ` (${leaveTypeInfo(e.kind).label})`}</td>
+                    <td>{e.note}{e.kind === ENCASHMENT_TYPE && ' (Earned Leave encashed)'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -183,6 +195,50 @@ export default async function EmployeeLedgerPage({ params }: { params: Params })
           Total leave on record: {formatDays(records.filter((r) => r.leave_type !== ENCASHMENT_TYPE).reduce((s, r) => s + r.actual_days, 0))}.
           Rows with a lock belong to a closed leave year.
         </p>
+      </section>
+
+      <section className="card" aria-labelledby="late-title" style={{ marginTop: '1.25rem' }}>
+        <div className="card-head">
+          <div>
+            <h2 id="late-title">Late arrivals</h2>
+            <p>Each recorded date. The monthly Casual Leave cut is shown in the ledger above.</p>
+          </div>
+        </div>
+        {lateEntries.length === 0 ? (
+          <EmptyState title="No late arrivals recorded by date" />
+        ) : (
+          <div className="table-wrap table-scroll" style={{ maxHeight: 320 }}>
+            <table className="table">
+              <thead><tr><th>Date</th><th className="num">Minutes</th><th>Note</th><th className="right no-print"><span className="sr-only">Remove</span></th></tr></thead>
+              <tbody>
+                {lateEntries.map((l) => (
+                  <tr key={l.id} className={l.date < settings.leaveYearStart ? 'locked' : undefined}>
+                    <td className="nowrap">{formatDisplayDate(l.date)}</td>
+                    <td className="num">{l.minutes_late ?? '—'}</td>
+                    <td>{l.note ?? ''}</td>
+                    <td className="right no-print">
+                      {l.date >= settings.leaveYearStart && <LateArrivalRemoveButton id={l.id} date={l.date} />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {lates.some((l) => (l.undated_count ?? 0) > 0 && `${l.month_year}-01` >= settings.leaveYearStart) && (
+          <div className="no-print" style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {lates
+              .filter((l) => (l.undated_count ?? 0) > 0 && `${l.month_year}-01` >= settings.leaveYearStart)
+              .map((l) => (
+                <ClearUndatedButton
+                  key={l.id}
+                  employeeId={employee.id}
+                  month={l.month_year}
+                  label={`${new Date(`${l.month_year}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}: ${l.undated_count} recorded as a monthly total`}
+                />
+              ))}
+          </div>
+        )}
       </section>
 
       <div className="print-only print-footer">

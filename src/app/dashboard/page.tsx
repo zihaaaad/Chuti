@@ -8,8 +8,10 @@ import { addDays, currentMonthLocal, formatDisplayRange, monthBounds, todayLocal
 import { chargedDaysWithin } from '@/lib/domain/leave-days';
 import { ENCASHMENT_TYPE } from '@/lib/domain/leave-types';
 import { remainingSql } from '@/lib/domain/balance';
-import { Alert, EmptyState, LeaveTypeBadge, PageHeader, formatDays } from '@/components/ui';
+import { Alert, EmptyState, PageHeader, formatDays } from '@/components/ui';
+import LeaveTypeBadge from '@/components/LeaveTypeBadge';
 import { backupCopyHealth, readBackupCopyConfig } from '@/lib/backup-copies';
+import { CLOUD_PROVIDER_LABEL, cloudBackupHealth, readCloudConfig } from '@/lib/cloud-backup';
 import QuickLateForm from './QuickLateForm';
 import RefreshButton from './RefreshButton';
 
@@ -43,7 +45,8 @@ export default async function DashboardPage() {
       today, addDays(today, 14), ENCASHMENT_TYPE,
     ),
     db.all<{ start_date: string; end_date: string; actual_days: number }[]>(
-      "SELECT start_date, end_date, actual_days FROM leave_records WHERE leave_type = 'LWP' AND start_date <= ? AND end_date >= ?",
+      `SELECT r.start_date, r.end_date, r.actual_days FROM leave_records r JOIN leave_types t ON t.code = r.leave_type
+       WHERE t.is_paid = 0 AND r.start_date <= ? AND r.end_date >= ?`,
       monthEnd, monthStart,
     ),
     db.get<{ total: number | null }>('SELECT SUM(late_count) AS total FROM late_deductions WHERE month_year = ?', month),
@@ -62,12 +65,14 @@ export default async function DashboardPage() {
 
   const copyConfig = await readBackupCopyConfig(db);
   const copyHealth = backupCopyHealth(copyConfig);
+  const cloudConfig = await readCloudConfig(db);
+  const cloudHealth = cloudBackupHealth(cloudConfig);
 
   const setupSteps = [
     { done: settings.instituteName !== 'Chuti Leave Management', label: 'Set your organisation name', href: '/dashboard/settings' },
     { done: (holidayCount?.count ?? 0) > 0, label: "Add this year's holidays", href: '/dashboard/settings#holidays' },
     { done: activeEmployees > 0, label: 'Add or import employees', href: '/dashboard/employees' },
-    { done: copyHealth !== 'unset', label: 'Choose a folder for backup copies', href: '/dashboard/settings#backup-copies' },
+    { done: copyHealth !== 'unset' || cloudHealth !== 'unset', label: 'Set up backup copies or cloud backup', href: '/dashboard/settings#backup-copies' },
   ];
   const setupIncomplete = setupSteps.some((s) => !s.done);
 
@@ -94,6 +99,17 @@ export default async function DashboardPage() {
               ? `The last backup copy failed${copyConfig.lastError ? `: ${copyConfig.lastError}` : '.'} `
               : 'No backup copy has been saved in the last 48 hours. '}
             <Link href="/dashboard/settings#backup-copies">Check backup copies</Link>
+          </Alert>
+        </div>
+      )}
+
+      {(cloudHealth === 'failing' || cloudHealth === 'overdue') && cloudConfig.provider && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <Alert tone={cloudHealth === 'failing' ? 'danger' : 'warning'}>
+            {cloudHealth === 'failing'
+              ? `The last upload to ${CLOUD_PROVIDER_LABEL[cloudConfig.provider]} failed${cloudConfig.lastError ? `: ${cloudConfig.lastError}` : '.'} `
+              : `Nothing has been uploaded to ${CLOUD_PROVIDER_LABEL[cloudConfig.provider]} in the last 48 hours. `}
+            <Link href="/dashboard/settings#cloud-backup">Check cloud backup</Link>
           </Alert>
         </div>
       )}
@@ -193,7 +209,7 @@ export default async function DashboardPage() {
                 </p>
               </div>
             </div>
-            <QuickLateForm employees={employees} currentMonth={month} threshold={settings.lateThreshold} />
+            <QuickLateForm employees={employees} today={today} threshold={settings.lateThreshold} />
           </section>
         </aside>
       </div>
